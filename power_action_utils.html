@@ -1,0 +1,55 @@
+<?xml version="1.0" ?>
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head>
+<title>lib/power_action_utils.pm</title>
+<meta http-equiv="content-type" content="text/html; charset=utf-8" />
+<link rel="stylesheet" href="style.css" />
+</head>
+
+<body>
+
+
+
+<ul id="index">
+  <li>
+    <ul>
+      <li><a href="#handle_livecd_reboot_failure">handle_livecd_reboot_failure</a></li>
+      <li><a href="#power_action">power_action</a></li>
+      <li><a href="#assert_shutdown_with_soft_timeout">assert_shutdown_with_soft_timeout</a></li>
+    </ul>
+  </li>
+</ul><h1>lib/power_action_utils.pm</h1>
+
+<h2 id="handle_livecd_reboot_failure">handle_livecd_reboot_failure</h2>
+
+<p>Handle a potential failure on a live CD related to boo#993885 that the reboot action from a desktop session does not work and we are stuck on the desktop.</p>
+
+<h2 id="power_action">power_action</h2>
+
+<pre><code>    power_action($action [,observe =&gt; $observe] [,keepconsole =&gt; $keepconsole] [,textmode =&gt; $textmode]);</code></pre>
+
+<p>Executes the selected power action (e.g. poweroff, reboot). If <code>$observe</code> is set the function expects that the specified <code>$action</code> was already executed by another actor and the function justs makes sure the system shuts down, restart etc. properly. <code>$keepconsole</code> prevents a console change, which we do by default to make sure that a system with a GUI desktop which was in text console at the time of <code>power_action</code> call, is switched to the expected console, that is &#39;root-console&#39; for textmode, &#39;x11&#39; otherwise. The actual execution happens in a shell for textmode or with GUI commands otherwise unless explicitly overridden by setting <code>$textmode</code> to either 0 or 1.</p>
+
+<h2 id="assert_shutdown_with_soft_timeout">assert_shutdown_with_soft_timeout</h2>
+
+<pre><code>  assert_shutdown_with_soft_timeout([$args]);
+
+  $args = {[timeout =&gt; $timeout] [,soft_timeout =&gt; $soft_timeout] [,bugref =&gt; $bugref] [,soft_failure_reason =&gt; $soft_failure_reason]}</code></pre>
+
+<p>Extending assert_shutdown with a soft timeout. When <code>$args-</code>{soft_timeout}&gt; is reached, a soft failure is recorded with the message <code>$args-</code>{soft_failure_reason}&gt;. After that, assert_shutdown continues until the (hard) timeout <code>$args-</code>{timeout}&gt; is hit.</p>
+
+<p>This makes sense when a shutdown sporadically takes longer then it normally should take and the proper statistics of such cases should be gathered instead of just increasing a timeout.</p>
+
+<p>If <code>$args-</code>{soft_timeout}&gt; is not specified, then the default assert_shutdown is executed.</p>
+
+<p>Example:</p>
+
+<pre><code>  assert_shutdown_with_soft_timeout({timeout =&gt; 300, soft_timeout =&gt; 60, bugref =&gt; &#39;bsc#123456&#39;});</code></pre>
+
+
+</body>
+
+</html>
+
+

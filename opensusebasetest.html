@@ -1,0 +1,85 @@
+<?xml version="1.0" ?>
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head>
+<title>lib/opensusebasetest.pm</title>
+<meta http-equiv="content-type" content="text/html; charset=utf-8" />
+<link rel="stylesheet" href="style.css" />
+</head>
+
+<body>
+
+
+
+<ul id="index">
+  <li>
+    <ul>
+      <li><a href="#wait_grub">wait_grub</a></li>
+      <li><a href="#wait_grub_to_boot_on_local_disk">wait_grub_to_boot_on_local_disk</a></li>
+      <li><a href="#wait_boot">wait_boot</a></li>
+      <li><a href="#firewall">firewall</a></li>
+      <li><a href="#remount_tmp_if_ro">remount_tmp_if_ro</a></li>
+      <li><a href="#select_serial_terminal">select_serial_terminal</a></li>
+      <li><a href="#select_user_serial_terminal">select_user_serial_terminal</a></li>
+    </ul>
+  </li>
+</ul><h1>lib/opensusebasetest.pm</h1>
+
+<h2 id="wait_grub">wait_grub</h2>
+
+<pre><code>  wait_grub([bootloader_time =&gt; $bootloader_time] [,in_grub =&gt; $in_grub]);</code></pre>
+
+<p>Makes sure the bootloader appears. Returns successfully when reached the bootloader menu, ready to control it further or continue. The time waiting for the bootloader can be configured with <code>$bootloader_time</code> in seconds. Set <code>$in_grub</code> to 1 when the SUT is already expected to be within the grub menu.</p>
+
+<h2 id="wait_grub_to_boot_on_local_disk">wait_grub_to_boot_on_local_disk</h2>
+
+<pre><code>  wait_grub_to_boot_on_local_disk</code></pre>
+
+<p>When bootloader appears, make sure to boot from local disk when it is on aarch64.</p>
+
+<h2 id="wait_boot">wait_boot</h2>
+
+<pre><code>  wait_boot([bootloader_time =&gt; $bootloader_time] [, textmode =&gt; $textmode] [,ready_time =&gt; $ready_time] [,in_grub =&gt; $in_grub] [, nologin =&gt; $nologin] [, forcenologin =&gt; $forcenologin]);</code></pre>
+
+<p>Makes sure the bootloader appears and then boots to desktop or text mode correspondingly. Returns successfully when the system is ready on a login prompt or logged in desktop. Set <code>$textmode</code> to 1 when the text mode login prompt should be expected rather than a desktop or display manager. <code>wait_boot</code> also handles unlocking encrypted disks if needed as well as various exceptions during the boot process. Also, before the bootloader menu or login prompt various architecture or machine specific handlings are in place. The time waiting for the bootloader can be configured with <code>$bootloader_time</code> in seconds as well as the time waiting for the system to be fully booted with <code>$ready_time</code> in seconds. Set <code>$in_grub</code> to 1 when the SUT is already expected to be within the grub menu. <code>wait_boot</code> continues from there. <code>$forcenologin</code> makes this function behave as if the env var NOAUTOLOGIN was set.</p>
+
+<h2 id="firewall">firewall</h2>
+
+<pre><code>  firewall();</code></pre>
+
+<p>Return the default expected firewall implementation depending on the product under test, the version and if the SUT is an upgrade.</p>
+
+<h2 id="remount_tmp_if_ro">remount_tmp_if_ro</h2>
+
+<pre><code>    remount_tmp_if_ro()</code></pre>
+
+<p>Mounts /tmp to shared memory if not possible to write to tmp. For example, save_y2logs creates temporary files there.</p>
+
+<h2 id="select_serial_terminal">select_serial_terminal</h2>
+
+<pre><code>    select_serial_terminal($root);</code></pre>
+
+<p>Select most suitable text console with root user. The choice is made by BACKEND and other variables.</p>
+
+<p>Purpose of this wrapper is to avoid if/else conditions when selecting console.</p>
+
+<p>Optional <code>root</code> parameter specifies, whether use root user (<code>root</code>=1, also default when parameter not specified) or prefer non-root user if available.</p>
+
+<p>Variables affecting behavior: <code>VIRTIO_CONSOLE</code>=0 disables virtio console (use {root,user}-console instead of the default {root-,}virtio-terminal)</p>
+
+<p><code>SERIAL_CONSOLE</code>=0 disables serial console (use {root,user}-console instead of the default {root-,}sut-serial)</p>
+
+<p>On ikvm|ipmi|spvm it&#39;s expected, that use_ssh_serial_console() has been called (done via activate_console()) therefore SERIALDEV has been set and we can use root-ssh console directly.</p>
+
+<h2 id="select_user_serial_terminal">select_user_serial_terminal</h2>
+
+<pre><code>    select_user_serial_terminal();</code></pre>
+
+<p>Select most suitable text console with non-root user. The choice is made by BACKEND and other variables.</p>
+
+
+</body>
+
+</html>
+
+
