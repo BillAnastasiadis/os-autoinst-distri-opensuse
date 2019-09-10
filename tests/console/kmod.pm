@@ -11,9 +11,9 @@
 # depmod. Tests the commands and their output for common words that
 # should appear independently of the individual modules loaded in
 # each system.
-# * modinfo: 'filename ... .ko', 'license ... GPL', 'author ... Qumranet'
+# * modinfo: 'filename ... .ko', 'license: ...', 'depends: ...'
 # * lsmod: 'Module', 'Size', 'Used by'
-# * modprobe: We make sure arc4 module is not active and then we activate it
+# * modprobe: We make sure a random module is not active and then we activate it
 # * rmmod: We check the exit status and then we enable the disabled module again
 # * depmod: 'lib/modules', '.ko', 'kernel'.
 # Maintainer: Vasilios Anastasiadis <vasilios.anastasiadis@suse.com>
@@ -26,29 +26,34 @@ use utils 'zypper_call';
 
 sub run {
     select_console 'root-console';
+    #get list of loadable modules on the system
+    my $nm = script_output("find /lib/modules/\$(uname -r) -type f -name '*.ko'");
+    #take the last module, strip it of unnecesary characters and extensions
+    my @full = split '/', $nm;
+    my $wrd = $full[-1];
+    my @mdl = split '\.', $wrd; #mdl[0] contains a loadable module
 
     #test modinfo command
-    assert_script_run('OUT="$(modinfo kvm)"');
+    assert_script_run("OUT=\"\$(modinfo $mdl[0])\"");
     #test the output for common words that should always appear
-    assert_script_run('grep -o -m 1 \'^filename:.*kvm.ko\' <<< "$OUT"');
-    assert_script_run('grep -o -m 1 \'^license:.*GPL\' <<< "$OUT"');
-    assert_script_run('grep -o -m 1 \'^author:.*Qumranet\' <<< "$OUT"');
-    assert_script_run('grep -o -m 1 \'^parm:.*ignore_msrs:bool\' <<< "$OUT"');
+    assert_script_run('grep -o -m 1 \'^filename:.*.ko\' <<< "$OUT"');
+    assert_script_run('grep -o -m 1 \'^license:.*\' <<< "$OUT"');
+    assert_script_run('grep -o -m 1 \'^depends:.*\' <<< "$OUT"');
 
     #test lsmod command
     #test that the output has the expected correct format
     assert_script_run('lsmod | grep \'^Module.*Size.*Used by$\'');
 
-    #test modprobe -v arc4 command
-    script_run('rmmod arc4');
-    assert_script_run('modprobe -v arc4 | grep \'^insmod.*arc4.ko\'');
+    #test modprobe -v command
+    script_run("rmmod $mdl[0]");
+    assert_script_run("modprobe -v --allow-unsupported-modules $mdl[0] | grep '^insmod.*$mdl[0].ko'");
 
-    #test rmmod arc4 command
-    assert_script_run('rmmod arc4');
+    #test rmmod command
+    assert_script_run("rmmod $mdl[0]");
     #make sure the command terminated the module by starting it again
-    assert_script_run('modprobe -v arc4 | grep \'^insmod.*arc4.ko\'');
+    assert_script_run("modprobe -v --allow-unsupported-modules $mdl[0] | grep '^insmod.*$mdl[0].ko'");
 
-    #test depmod
+    #test depmod command
     assert_script_run('OUT="$(depmod -av)"');
     #test the output for common words that should always appear
     assert_script_run('grep -o -m 1 .ko <<< "$OUT"');
