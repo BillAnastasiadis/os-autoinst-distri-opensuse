@@ -3,11 +3,11 @@ name: qam-yast_self_update
 description: self_update via INSTALLER repo & efi test on UEFI
 schedule:
 - installation/bootloader_start
+- installation/setup_libyui
 - installation/welcome
 - installation/scc_registration
-- installation/add_update_test_repo
+- installation/add_maintenance_repos
 - installation/addon_products_sle
-- installation/system_role
 - installation/partitioning
 - installation/partitioning_finish
 - installation/installer_timezone
