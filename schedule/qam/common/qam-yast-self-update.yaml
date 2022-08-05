@@ -6,7 +6,7 @@ schedule:
 - installation/setup_libyui
 - installation/welcome
 - installation/scc_registration
-- installation/add_maintenance_repos
+- installation/add_update_test_repo
 - installation/addon_products_sle
 - installation/partitioning
 - installation/partitioning_finish
