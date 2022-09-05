@@ -4,28 +4,46 @@
 <head>
 <title>lib/yast2_widget_utils.pm</title>
 <meta http-equiv="content-type" content="text/html; charset=utf-8" />
-<link rel="stylesheet" href="style.css" />
+<link rel='stylesheet' href='./style.css' />
 </head>
 
 <body>
 
 
 
-<ul id="index">
-  <li>
+<ul id="index"><li><a href="./index.html"><i>&lt;= Back to file list</i></a></li>
+  <li><a href="#yast2_widget_utils.pm">yast2_widget_utils.pm</a>
     <ul>
-      <li><a href="#verify_service_configuration-Verify-service-configuration:-status">verify_service_configuration Verify service configuration: status</a></li>
-      <li><a href="#change_service_configuration-Modify-service-configuration:-after-writing-and-or-after-reboot-steps">change_service_configuration Modify service configuration: &quot;after writing&quot; and/or &quot;after reboot&quot; steps</a></li>
-      <li><a href="#change_service_configuration_step-Modify-one-service-configuration-step">change_service_configuration_step Modify one service configuration step</a></li>
+      <li><a href="#verify_service_configuration">verify_service_configuration</a></li>
+      <li><a href="#change_service_configuration">change_service_configuration</a></li>
+      <li><a href="#change_service_configuration_step">change_service_configuration_step</a></li>
     </ul>
   </li>
 </ul><h1>lib/yast2_widget_utils.pm</h1>
 
-<h2 id="verify_service_configuration-Verify-service-configuration:-status">verify_service_configuration Verify service configuration: status</h2>
+<h1 id="yast2_widget_utils.pm">yast2_widget_utils.pm</h1>
 
-<h2 id="change_service_configuration-Modify-service-configuration:-after-writing-and-or-after-reboot-steps">change_service_configuration Modify service configuration: &quot;after writing&quot; and/or &quot;after reboot&quot; steps</h2>
+<p>This module provides helper functions for handling YaST widgets in text and graphical mode.</p>
 
-<h2 id="change_service_configuration_step-Modify-one-service-configuration-step">change_service_configuration_step Modify one service configuration step</h2>
+<h2 id="verify_service_configuration">verify_service_configuration</h2>
+
+<pre><code> verify_service_configuration([status =&gt; $status]);</code></pre>
+
+<p>Verify service configuration: status. This will just verify <code>assert_screen</code> for <code>yast2_ncurses_service_$status</code>.</p>
+
+<h2 id="change_service_configuration">change_service_configuration</h2>
+
+<pre><code> change_service_configuration([after_writing =&gt; $after_writing], [after_reboot =&gt; $after_reboot]);</code></pre>
+
+<p>Modify service configuration: &quot;after writing&quot; and/or &quot;after reboot&quot; steps</p>
+
+<h2 id="change_service_configuration_step">change_service_configuration_step</h2>
+
+<pre><code> change_service_configuration_step($step_name, $step_conf_ref);</code></pre>
+
+<p>Modify one service configuration step.</p>
+
+<p><code>$step_name</code> is the name for change service configuration. It is a part of <code>needle_selection</code> which is used for needle match. <code>$step_conf_ref</code> is used together with &#39;keys&#39; as a reference for <code>$action</code>. It is used also with &#39;values&#39; as a reference for <code>$shortcut</code>. <code>$action</code> is a part of <code>needle_selection</code> which is used for needle match.</p>
 
 
 </body>

@@ -4,19 +4,21 @@
 <head>
 <title>lib/registration.pm</title>
 <meta http-equiv="content-type" content="text/html; charset=utf-8" />
-<link rel="stylesheet" href="style.css" />
+<link rel='stylesheet' href='./style.css' />
 </head>
 
 <body>
 
 
 
-<ul id="index">
+<ul id="index"><li><a href="./index.html"><i>&lt;= Back to file list</i></a></li>
   <li>
     <ul>
       <li><a href="#scc_version">scc_version</a></li>
       <li><a href="#add_suseconnect_product">add_suseconnect_product</a></li>
+      <li><a href="#ssh_add_suseconnect_product">ssh_add_suseconnect_product</a></li>
       <li><a href="#remove_suseconnect_product">remove_suseconnect_product</a></li>
+      <li><a href="#ssh_remove_suseconnect_product">ssh_remove_suseconnect_product</a></li>
       <li><a href="#cleanup_registration">cleanup_registration</a></li>
       <li><a href="#register_product">register_product</a></li>
     </ul>
@@ -35,11 +37,23 @@
 
 <p>Wrapper for SUSEConnect -p $name.</p>
 
+<h2 id="ssh_add_suseconnect_product">ssh_add_suseconnect_product</h2>
+
+<pre><code>    ssh_add_suseconnect_product($remote, $name, [$version, [$arch, [$params, [$timeout, [$retries, [$delay]]]]]]);</code></pre>
+
+<p>Wrapper for SUSEConnect -p $name over ssh.</p>
+
 <h2 id="remove_suseconnect_product">remove_suseconnect_product</h2>
 
 <pre><code>    remove_suseconnect_product($name, [$version, [$arch, [$params]]]);</code></pre>
 
 <p>Wrapper for SUSEConnect -d $name.</p>
+
+<h2 id="ssh_remove_suseconnect_product">ssh_remove_suseconnect_product</h2>
+
+<pre><code>    ssh_remove_suseconnect_product($name, [$version, [$arch, [$params]]]);</code></pre>
+
+<p>Wrapper for SUSEConnect -d $name over ssh.</p>
 
 <h2 id="cleanup_registration">cleanup_registration</h2>
 
@@ -51,7 +65,7 @@
 
 <pre><code>    register_product();</code></pre>
 
-<p>Wrapper for SUSEConnect -r &lt;regcode&gt;. Requires SCC_REGCODE variable.</p>
+<p>Wrapper for SUSEConnect -r &lt;regcode&gt;. Requires SCC_REGCODE variable. SUSEConnect --url with SMT/RMT server.</p>
 
 
 </body>

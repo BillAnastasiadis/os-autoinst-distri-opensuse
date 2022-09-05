@@ -4,18 +4,20 @@
 <head>
 <title>lib/serial_terminal.pm</title>
 <meta http-equiv="content-type" content="text/html; charset=utf-8" />
-<link rel="stylesheet" href="style.css" />
+<link rel='stylesheet' href='./style.css' />
 </head>
 
 <body>
 
 
 
-<ul id="index">
+<ul id="index"><li><a href="./index.html"><i>&lt;= Back to file list</i></a></li>
   <li>
     <ul>
       <li><a href="#add_serial_console">add_serial_console</a></li>
+      <li><a href="#prepare_serial_console">prepare_serial_console</a></li>
       <li><a href="#get_login_message">get_login_message</a></li>
+      <li><a href="#set_serial_prompt">set_serial_prompt</a></li>
       <li><a href="#login">login</a></li>
       <li><a href="#download_file">download_file</a></li>
       <li><a href="#upload_file-upload_file-src-dst-chunk_size-cz-chunk_retry-cr">upload_file upload_file($src, $dst, [, chunk_size =&gt; $cz][, chunk_retry =&gt; $cr]);</a></li>
@@ -29,6 +31,12 @@
 
 <p>Adds $console to /etc/securetty (unless already in file), enables systemd service and start it. It requires selecting root console before.</p>
 
+<h2 id="prepare_serial_console">prepare_serial_console</h2>
+
+<pre><code>    prepare_serial_console();</code></pre>
+
+<p>Wrapper for add_serial_console.</p>
+
 <h2 id="get_login_message">get_login_message</h2>
 
 <pre><code>   get_login_message();</code></pre>
@@ -36,6 +44,12 @@
 <p>Get login message printed by OS at the end of the boot. Suitable for testing whether boot has been finished:</p>
 
 <p>wait_serial(get_login_message(), 300);</p>
+
+<h2 id="set_serial_prompt">set_serial_prompt</h2>
+
+<pre><code>   set_serial_prompt($user);</code></pre>
+
+<p>Set serial terminal prompt to given string.</p>
 
 <h2 id="login">login</h2>
 
