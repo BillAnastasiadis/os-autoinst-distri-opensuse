@@ -71,6 +71,18 @@ END_SCRIPT
         # Before updating this value again, check the system logs
         assert_script_run(q{systemctl restart systemd-journald}, 120);
     }
+     # workaround for network issue
+     enter_cmd("cd /var/lib/wicked");
+     #my @files = qw(duid.xml lease-eth0-dhcp-ipv4.xml lease-eth0-dhcp-ipv6.xml); 
+     enter_cmd("export files=('duid.xml' 'lease-eth0-dhcp-ipv4.xml' 'lease-eth0-dhcp-ipv6.xml')");
+     enter_cmd("ls /var/lib/wicked");
+     enter_cmd("cat /var/lib/wicked/duid.xml");
+     enter_cmd("for i in \${files[@]}; do echo '' > /var/lib/wicked/\$i; done");
+     #enter_cmd('for i in duid.xml lease-eth0-dhcp-ipv4.xml lease-eth0-dhcp-ipv6.xml; do echo '' > /var/lib/wicked/$i; done');
+     enter_cmd("ls /var/lib/wicked/");
+     enter_cmd("cat /var/lib/wicked/duid.xml");
+     assert_script_run('systemctl restart network');
+     assert_script_run('systemctl status network');
 }
 
 sub post_fail_hook {
