@@ -18,7 +18,7 @@ use kdump_utils;
 use version_utils qw(is_sle);
 
 sub run {
-    my $self =  shift;
+    my $self =   shift;
     $self->select_serial_terminal;
     prepare_for_kdump();
     zypper_call("in systemtap systemtap-docs kernel-devel systemtap-server");
