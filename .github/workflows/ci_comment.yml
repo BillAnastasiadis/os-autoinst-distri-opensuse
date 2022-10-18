@@ -1,0 +1,18 @@
+---
+name: ci_comment
+# yamllint disable-line rule:truthy
+on:
+  workflow_run:
+    workflows: ["ci"]
+    types:
+      - completed
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: testing
+        uses: marocchino/sticky-pull-request-comment@v2
+        with:
+          message: |
+            This is your comment. Can I go now?
+
