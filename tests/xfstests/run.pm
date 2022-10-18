@@ -25,7 +25,7 @@ use File::Basename;
 use testapi;
 use utils;
 use Utils::Backends 'is_pvm';
-use power_action_utils 'power_action';
+use power_action_utils qw(power_action prepare_system_shutdown);
 use filesystem_utils qw(format_partition);
 
 # Heartbeat variables
@@ -471,7 +471,9 @@ sub run {
         };
         # If SUT didn't reboot for some reason, force reset
         if ($@) {
-            power_action('reset', keepconsole => is_pvm);
+            prepare_system_shutdown;
+            select_console 'root-console' unless is_pvm;
+            send_key 'alt-sysrq-b';
             reconnect_mgmt_console if is_pvm;
             $self->wait_boot;
         }
@@ -504,16 +506,21 @@ sub run {
     #Save status log before next step(if run.pm fail will load into a last good snapshot)
     save_tmp_file('status.log', $status_log_content);
     my $local_file = "/tmp/opt_logs.tar.gz";
-    script_run("tar zcvf $local_file --absolute-names /opt/log/");
-    script_run("NUM=0; while [ ! -f $local_file ]; do sleep 20; NUM=\$(( \$NUM + 1 )); if [ \$NUM -gt 10 ]; then break; fi; done");
-    upload_logs $local_file;
+    my $back_pid = background_script_run("tar zcvf $local_file --absolute-names /opt/log/");
+    script_run("wait $back_pid");
+    upload_logs($local_file, failok => 1, timeout => 180);
+}
+
+sub test_flags {
+    return {fatal => 0};
 }
 
 sub post_fail_hook {
     my ($self) = shift;
     # Collect executed test logs
-    script_run 'tar zcvf /tmp/opt_logs.tar.gz --absolute-names /opt/log/';
-    upload_logs '/tmp/opt_logs.tar.gz';
+    my $back_pid = background_script_run('tar zcvf /tmp/opt_logs.tar.gz --absolute-names /opt/log/');
+    script_run("wait $back_pid");
+    upload_logs('/tmp/opt_logs.tar.gz', failok => 1, timeout => 180);
 }
 
 1;

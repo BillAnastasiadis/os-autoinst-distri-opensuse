@@ -17,6 +17,7 @@ use version_utils 'is_sle';
 use hpc::formatter;
 
 sub run ($self) {
+    $self->select_serial_terminal();
     my $mpi = $self->get_mpi();
     my ($mpi_compiler, $mpi_c) = $self->get_mpi_src();
     my $mpi_bin = 'mpi_bin';
@@ -26,13 +27,13 @@ sub run ($self) {
         bin => '/home/bernhard/bin',
         hpc_lib => '/usr/lib/hpc',
     );
-
+    script_run("sudo -u $testapi::username mkdir $exports_path{bin}");
     zypper_call("in $mpi-gnu-hpc $mpi-gnu-hpc-devel python3-devel");
     my $need_restart = $self->setup_scientific_module();
     $self->relogin_root if $need_restart;
     $self->setup_nfs_server(\%exports_path);
 
-    type_string('pkill -u root');
+    type_string('pkill -u root', lf => 1);
     $self->select_serial_terminal(0);
     # for <15-SP2 the openmpi2 module is named simply openmpi
     $mpi = 'openmpi' if ($mpi =~ /openmpi2|openmpi3|openmpi4/);

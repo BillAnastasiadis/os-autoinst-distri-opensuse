@@ -108,8 +108,9 @@ LTP_COMMAND_FILE | string | | The LTP test command file (e.g. syscalls, cve)
 LTP_COMMAND_EXCLUDE | string | | This regex is used to exclude tests from LTP command file.
 LTP_KNOWN_ISSUES | string | | Used to specify a url for a json file with well known LTP issues. If an error occur which is listed, then the result is overwritten with softfailure.
 LTP_REPO | string | | The repo which will be added and is used to install LTP package.
-LTP_RUN_NG_BRANCH | string | | Define the branch of the LTP_RUN_NG_REPO.
-LTP_RUN_NG_REPO | string | | Define the runltp-ng repo to be used. Default in publiccloud/run_ltp.pm is the upstream master branch from https://github.com/metan-ucw/runltp-ng.git.
+LTP_RUN_NG_BRANCH | string | master | Define the branch of the LTP_RUN_NG_REPO.
+LTP_RUN_NG_REPO | string | https://github.com/metan-ucw/runltp-ng.git | Define the runltp-ng repo to be used. Default in publiccloud/run_ltp.pm is the upstream master branch from https://github.com/metan-ucw/runltp-ng.git.
+LTP_RUNTIME_SWITCH | boolean | false | Values: true for `python`, false for `perl`. This parameter is temporary and used to run proof and consolidation tests on the new python version of the LTP runltp-ng repository, allowing to switch between the original Perl and the new Python repo versions. **NOTE**: when `python` value set(true), also needed to set: `LTP_RUN_NG_REPO=`*https://github.com/acerv/runltp-ng.git* and `LTP_RUN_NG_BRANCH=`*ssh*.
 LVM | boolean | false | Use lvm for partitioning.
 LVM_THIN_LV | boolean | false | Use thin provisioning logical volumes for partitioning,
 MACHINE | string | | Define machine name which defines worker specific configuration, including WORKER_CLASS.
@@ -224,6 +225,13 @@ TRENTO_REGISTRY_IMAGE_WEB | string |  | Optional. Overwrite the trento-web image
 TRENTO_REGISTRY_IMAGE_WEB_VERSION | string |  | Optional. Version tag for the trento-web image
 TRENTO_GITLAB_REPO | string | gitlab.suse.de/qa-css/trento | Repository for the deployment scripts
 TRENTO_GITLAB_BRANCH | string | master | Branch to use in the deployment script repository
+TRENTO_GITLAB_TOKEN | string | | Force te use of a custom token
+TRENTO_DEPLOY_VER | string | | Force the Trento deployment script to be used from a release
+TRENTO_AGENT_REPO | string | https://dist.suse.de/ibs/Devel:/SAP:/trento:/factory/SLE_15_SP3/x86_64 | Repository where to get the trento-agent installer
+TRENTO_AGENT_RPM | string | | Trento-agent rpm file name
+TRENTO_EXT_DEPLOY_IP | string | | Public IP of a Trento web instance not deployed by openQA
+TRENTO_WEB_PASSWORD | string | | Trento web password for the admin user. If not provided, random generated one.
+TRENTO_CLUSTER_OS_VER | string | | OS for nodes in SAP cluster.
 
 
 ### Publiccloud specific variables
@@ -246,7 +254,6 @@ PUBLIC_CLOUD_AZURE_SKU | string | "" | Specific to Azure.
 PUBLIC_CLOUD_BUILD | string | "" | The image build number. Used only when we use custom built image.
 PUBLIC_CLOUD_BUILD_KIWI | string | "" | The image kiwi build number. Used only when we use custom built image.
 PUBLIC_CLOUD_CHECK_BOOT_TIME | boolean | false | If set, boottime test module is added to the job.
-PUBLIC_CLOUD_GOOGLE_CLIENT_ID | string | "" | In GCE one of the variables used to authenticate  user.
 PUBLIC_CLOUD_CONFIDENTIAL_VM | boolean | false | GCE Confidential VM instance
 PUBLIC_CLOUD_UPLOAD_IMG | boolean | false | If set, `publiccloud/upload_image` test module is added to the job.
 PUBLIC_CLOUD_CONSOLE_TESTS | boolean | false | If set, console tests are added to the job.
@@ -259,16 +266,13 @@ PUBLIC_CLOUD_EC2_UPLOAD_VPCSUBNET | string | "" | Allow to instruct ec2uploadimg
 PUBLIC_CLOUD_FIO | boolean | false | If set, storage_perf test module is added to the job.
 PUBLIC_CLOUD_FIO_RUNTIME | integer | 300 | Set the execution time for each FIO tests.
 PUBLIC_CLOUD_FIO_SSD_SIZE | string | "100G" | Set the additional disk size for the FIO tests.
-PUBLIC_CLOUD_GOOGLE_UPLOAD_GUEST_FEATURES | string | "" | The list of features given to upload VM
 PUBLIC_CLOUD_IGNORE_EMPTY_REPO | boolean | false | Ignore empty maintenance update repos
 PUBLIC_CLOUD_IMAGE_ID | string | "" | The image ID we start the instance from
 PUBLIC_CLOUD_IMAGE_LOCATION | string | "" | The URL where the image gets downloaded from. The name of the image gets extracted from this URL.
 PUBLIC_CLOUD_IMAGE_PROJECT | string | "" | Google Compute Engine image project
-PUBLIC_CLOUD_IMG_PROOF_TESTS | string | false | Tests run  by img-proof. (We use 'default')
+PUBLIC_CLOUD_IMG_PROOF_TESTS | string | "test-sles" | Tests run by img-proof.
+PUBLIC_CLOUD_IMG_PROOF_EXCLUDE | string | "" | Tests to be excluded by img-proof.
 PUBLIC_CLOUD_INSTANCE_TYPE | string | "" | Specify the instance type. Which instance types exists depends on the CSP. (default-azure: Standard_A2, default-ec2: t2.large )
-PUBLIC_CLOUD_KEY | string | "" | Private key data for gce, similar to `PUBLIC_CLOUD_KEY_SECRET`.
-PUBLIC_CLOUD_KEY_ID | string | "" | The CSP credentials key-id to used to access API.
-PUBLIC_CLOUD_KEY_SECRET | string | "" | The CSP credentials secret used to access API.
 PUBLIC_CLOUD_LTP | boolean | false | If set, the run_ltp test module is added to the job.
 PUBLIC_CLOUD_NO_CLEANUP_ON_FAILURE | boolean | false | Do not remove the instance when the test fails.
 PUBLIC_CLOUD_PERF_DB_URI | string | "" | Optional variable. If set, the bootup times get stored in the influx database. The database name is 'publiccloud'. (e.g. PUBLIC_CLOUD_PERF_DB_URI=http://openqa-perf.qa.suse.de:8086)
@@ -283,8 +287,6 @@ PUBLIC_CLOUD_RESOURCE_NAME | string | "openqa-vm" | The name we use when creatin
 PUBLIC_CLOUD_SKIP_MU | boolean | false | Debug variable used to run test without maintenance updates repository being applied.
 PUBLIC_CLOUD_REDOWNLOAD_MU | boolean | false | Debug variable used to redownload the maintenance repositories (as they might be downloaded by parent test)
 PUBLIC_CLOUD_GOOGLE_ACCOUNT | string | "" | GCE only, used to specify the account id.
-PUBLIC_CLOUD_GOOGLE_SERVICE_ACCOUNT | string | "" | GCE only, used to specify the service account.
-PUBLIC_CLOUD_AZURE_TENANT_ID | string | "" | Used to create the service account file together with `PUBLIC_CLOUD_AZURE_SUBSCRIPTION_ID`.
 PUBLIC_CLOUD_TOOLS_REPO | string | false | The URL to the cloud:tools repo (optional). (e.g. http://download.opensuse.org/repositories/Cloud:/Tools/openSUSE_Tumbleweed/Cloud:Tools.repo).
 PUBLIC_CLOUD_TTL_OFFSET | integer | 300 | This number + MAX_JOB_TIME equals the TTL of created VM.
 PUBLIC_CLOUD_SLES4SAP | boolean | false | If set, sles4sap test module is added to the job.

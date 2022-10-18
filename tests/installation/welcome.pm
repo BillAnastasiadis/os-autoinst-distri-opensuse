@@ -1,7 +1,7 @@
 # SUSE's openQA tests
 #
 # Copyright 2009-2013 Bernhard M. Wiedemann
-# Copyright 2012-2020 SUSE LLC
+# Copyright 2012-2022 SUSE LLC
 # SPDX-License-Identifier: FSFAP
 
 # Summary: Wait for installer welcome screen. Covers loading linuxrc
@@ -59,17 +59,19 @@ Returns hash which contains shortcuts for the product selection.
 =cut
 sub get_product_shortcuts {
     # sles4sap does have different shortcuts in different tests at same time
-    #     ppc64le x86_64
-    # Full   u      i
-    # QR     i      p
-    # Online i      t
+    #               ppc64le x86_64
+    # Full              u      i
+    # Full (15-SP5)     i      t
+    # QR                i      p
+    # Online            i      t
     if (check_var('SLE_PRODUCT', 'sles4sap')) {
+        return (sles4sap => is_ppc64le() ? 'i' : 't') if get_var('ISO') =~ /Full/ && is_sle('15-SP5+');
         return (sles4sap => is_ppc64le() ? 'u' : 'i') if get_var('ISO') =~ /Full/;
         return (sles4sap => is_ppc64le() ? 'i' : is_quarterly_iso() ? 'p' : 't') unless get_var('ISO') =~ /Full/;
     }
     # We got new products in SLE 15 SP1
     elsif (is_sle '15-SP1+') {
-        return (sles => 's') if (get_var('ISO') =~ /Full/ && is_ppc64le() && get_var('NTLM_AUTH_INSTALL'));
+        return (sles => 'u') if (get_var('ISO') =~ /Full/ && is_ppc64le() && get_var('NTLM_AUTH_INSTALL'));
         return (
             sles => (is_ppc64le() || is_s390x()) ? 'u'
             : is_aarch64() ? 's'

@@ -1141,22 +1141,8 @@ sub load_console_server_tests {
         loadtest "console/shibboleth";
     }
     if (!is_staging && (is_opensuse || get_var('ADDONS', '') =~ /wsm/ || get_var('SCC_ADDONS', '') =~ /wsm/)) {
-        loadtest "console/php_pcre";
         # TODO test on SLE https://progress.opensuse.org/issues/31972
         loadtest "console/mariadb_odbc" if is_opensuse;
-        if (is_leap("<15.4") || is_sle("<15-SP4")) {
-            loadtest "console/php7";
-            loadtest "console/php7_mysql";
-            loadtest "console/php7_postgresql";
-            loadtest "console/php7_timezone";
-        }
-        else {
-            loadtest "console/php7" unless is_sle;
-            loadtest "console/php8";
-            loadtest "console/php8_mysql";
-            loadtest "console/php8_postgresql";
-            loadtest "console/php8_timezone";
-        }
     }
     # TODO test on openSUSE https://progress.opensuse.org/issues/31972
     loadtest "console/apache_ssl" if is_sle;
@@ -1675,8 +1661,6 @@ sub load_extra_tests_kdump {
 sub load_extra_tests_opensuse {
     return unless is_opensuse;
     loadtest "console/rabbitmq";
-    loadtest "console/rails";
-    loadtest "console/php_pcre";
     loadtest "console/openqa_review";
     loadtest "console/zbar";
     loadtest "console/a2ps";    # a2ps is not a ring package and thus not available in staging
@@ -2043,7 +2027,7 @@ sub load_x11_gnome {
 sub load_x11_other {
     if (check_var("DESKTOP", "gnome")) {
         loadtest "x11/brasero/brasero_launch";
-        loadtest "x11/gnomeapps/gnome_documents" if (is_sle('<16') || is_leap('<16.0'));
+        loadtest "x11/gnome_documents" if (is_sle('<16') || is_leap('<16.0'));
         loadtest "x11/totem/totem_launch";
         if (is_sle '15+') {
             loadtest "x11/xterm";
@@ -2214,7 +2198,8 @@ sub load_applicationstests {
 
 sub load_security_console_prepare {
     loadtest "console/consoletest_setup";
-    loadtest "security/test_repo_setup" if (get_var("SECURITY_TEST") =~ /^crypt_/ && !is_opensuse);
+    # Add this setup only in product testing
+    loadtest "security/test_repo_setup" if (get_var("SECURITY_TEST") =~ /^crypt_/ && !is_opensuse && get_var("BETA"));
     loadtest "fips/fips_setup" if (get_var("FIPS_ENABLED"));
     loadtest "console/openssl_alpn" if (get_var("FIPS_ENABLED") && get_var("JEOS"));
     loadtest "console/yast2_vnc" if (get_var("FIPS_ENABLED") && is_pvm);
@@ -2408,8 +2393,8 @@ sub load_security_tests_yast2_apparmor {
 
     loadtest "security/yast2_apparmor/settings_disable_enable_apparmor";
     loadtest "security/yast2_apparmor/settings_toggle_profile_mode";
-    loadtest "security/yast2_apparmor/scan_audit_logs";
-    loadtest "security/yast2_apparmor/manually_add_profile";
+    loadtest "security/yast2_apparmor/scan_audit_logs_ncurses";
+    loadtest "security/yast2_apparmor/manually_add_profile_ncurses";
 }
 
 sub load_security_tests_yast2_users {

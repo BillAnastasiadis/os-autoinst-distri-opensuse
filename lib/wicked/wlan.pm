@@ -140,6 +140,12 @@ sub dhcp_pidfile {
     return "/var/run/dnsmasq_$args{ref_ifc}.pid";
 }
 
+sub dhcp_logfile {
+    my ($self, %args) = @_;
+    $args{ref_ifc} //= $self->ref_bss(bss => $args{bss});
+    return "/var/log/dnsmasq_$args{ref_ifc}.log";
+}
+
 sub restart_dhcp_server {
     my ($self, %args) = @_;
 
@@ -147,8 +153,9 @@ sub restart_dhcp_server {
     $args{sut_ip} //= $self->sut_ip(bss => $args{bss});
 
     $self->stop_dhcp_server(%args);
-    $self->netns_exec(sprintf('dnsmasq --no-resolv --pid-file=%s --interface=%s --except-interface=lo --bind-interfaces --dhcp-range=%s,static --dhcp-host=%s,%s',
-            $self->dhcp_pidfile(%args), $args{ref_ifc}, $args{sut_ip}, $self->sut_hw_addr, $args{sut_ip}));
+    $self->netns_exec(sprintf('dnsmasq --no-resolv --pid-file=%s --log-facility=%s --log-dhcp --interface=%s --except-interface=lo --bind-interfaces --dhcp-authoritative --dhcp-range=%s,static --dhcp-host=%s,%s',
+            $self->dhcp_pidfile(%args), $self->dhcp_logfile(%args), $args{ref_ifc}, $args{sut_ip}, $self->sut_hw_addr, $args{sut_ip}));
+    $self->add_post_log_file($self->dhcp_logfile(%args));
 }
 
 sub stop_dhcp_server {
@@ -189,6 +196,8 @@ sub prepare_phys {
         die("Failed to get netns dummy pid") unless ($output =~ m/BACKGROUND_PROCESS:-(\d+)-/);
         $cmd_set_netns = 'iw phy ' . $self->ref_phy . ' set netns ' . $1;
     }
+    # Delay namespace setup of wlan device to avoid wickedd-nanny error message
+    sleep 3;
     assert_script_run($cmd_set_netns);
 
     assert_script_run('iw dev');

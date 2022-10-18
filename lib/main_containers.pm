@@ -142,9 +142,9 @@ sub load_host_tests_helm {
     my $backends = undef;
 
     if (is_sle('15-sp3+')) {
-        $backends = get_var("HELM_K8S_BACKEND", "GKE,EKS,AKS,K3S");
+        $backends = get_var("PUBLIC_CLOUD_PROVIDER", "GCE,EC2,AZURE,K3S");
     } elsif (is_opensuse) {
-        $backends = get_var("HELM_K8S_BACKEND", "K3S");
+        $backends = get_var("PUBLIC_CLOUD_PROVIDER", "K3S");
     } else {
         die("Helm backend not supported on this host");
     }
@@ -238,8 +238,9 @@ sub load_container_tests {
             load_host_tests_containerd_nerdctl() if (/containerd_nerdctl/i);
             loadtest('containers/kubectl') if (/kubectl/i);
             load_host_tests_helm($run_args) if (/helm/i);
+            loadtest 'containers/apptainer' if (/apptainer/i);
         }
     }
     loadtest 'containers/bci_logs' if (get_var('BCI_TESTS'));
-    loadtest 'console/coredump_collect' unless (is_public_cloud || is_jeos || is_sle_micro || is_microos || is_leap_micro || get_var('BCI_TESTS') || is_ubuntu_host || is_expanded_support_host);
+    loadtest 'console/coredump_collect' unless (is_public_cloud || is_jeos || is_sle_micro || is_microos || is_leap_micro || is_alp || get_var('BCI_TESTS') || is_ubuntu_host || is_expanded_support_host);
 }

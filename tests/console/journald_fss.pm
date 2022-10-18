@@ -12,7 +12,7 @@
 #          Verify key should be generated,as well as a QR code
 #          No failed messages output
 #
-# Maintainer: Ben Chou <bchou@suse.com>
+# Maintainer: QE Security <none@suse.de>
 # Tags: poo#102038, poo#107485
 
 use base "consoletest";
@@ -27,11 +27,12 @@ sub run {
 
     # Enable FSS (Forward Secure Sealing)
     assert_script_run("sed -i -e 's/^Storage/#Storage/g' -e 's/^Seal/#Seal/g' /etc/systemd/journald.conf");
-    assert_script_run('echo -e "Storage=persistence\nSeal=yes" >> /etc/systemd/journald.conf');
+    assert_script_run('echo -e "Storage=persistent\nSeal=yes" >> /etc/systemd/journald.conf');
     assert_script_run("mkdir -p /var/log/journal");
     systemctl 'restart systemd-journald.service';
 
     # Setup keys
+    assert_script_run("journalctl --flush");
     assert_script_run("journalctl --interval=30s --setup-keys | tee /tmp/key");
     assert_script_run("journalctl --rotate");
 

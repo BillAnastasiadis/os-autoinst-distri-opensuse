@@ -117,14 +117,15 @@ sub upload_img {
     my $img_arch = get_var('PUBLIC_CLOUD_ARCH', 'x86_64');
     my $sec_group = get_var('PUBLIC_CLOUD_EC2_UPLOAD_SECGROUP');
     my $vpc_subnet = get_var('PUBLIC_CLOUD_EC2_UPLOAD_VPCSUBNET');
-    my $instance_type = get_var('PUBLIC_CLOUD_EC2_UPLOAD_INSTANCE_TYPE', 't2.micro');
+    my @instance_main_type = split(/\./, get_var('PUBLIC_CLOUD_INSTANCE_TYPE'));
+    my $instance_size = get_var('PUBLIC_CLOUD_IMAGE_LOCATION') =~ /-SAP-/ ? 'large' : 'micro';
+    my $instance_type = get_var('PUBLIC_CLOUD_EC2_UPLOAD_INSTANCE_TYPE', "$instance_main_type[0].$instance_size");
 
     # ec2uploadimg will fail without this file, but we can have it empty
     # because we passing all needed info via params anyway
     assert_script_run('echo " " > /root/.ec2utils.conf');
 
-    assert_script_run("ec2uploadimg --access-id '" . $self->provider_client->key_id
-          . "' -s '" . $self->provider_client->key_secret . "' "
+    assert_script_run("ec2uploadimg --access-id \$AWS_ACCESS_KEY_ID -s \$AWS_SECRET_ACCESS_KEY "
           . "--backing-store ssd "
           . "--grub2 "
           . "--machine '" . $img_arch . "' "
@@ -161,8 +162,6 @@ sub img_proof {
     $args{user} //= 'ec2-user';
     $args{provider} //= 'ec2';
     $args{ssh_private_key_file} //= $self->ssh_key_file;
-    $args{key_id} //= $self->provider_client->key_id;
-    $args{key_secret} //= $self->provider_client->key_secret;
     $args{key_name} //= $self->ssh_key;
 
     return $self->run_img_proof(%args);

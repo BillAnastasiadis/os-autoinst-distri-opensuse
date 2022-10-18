@@ -14,28 +14,38 @@ use Exporter;
 use strict;
 use warnings;
 use testapi;
-use utils qw(zypper_call script_retry file_content_replace validate_script_output_retry);
+use utils qw(zypper_call script_retry file_content_replace validate_script_output_retry random_string);
 use Utils::Systemd qw(systemctl);
 use containers::utils 'registry_url';
 use version_utils qw(is_sle);
 use registration qw(add_suseconnect_product get_addon_fullname);
 
-our @EXPORT = qw(install_k3s uninstall_k3s install_kubectl install_helm install_oc);
+our @EXPORT = qw(install_k3s uninstall_k3s install_kubectl install_helm install_oc apply_manifest wait_for_k8s_job_complete find_pods validate_pod_log);
+
+=head2 install_k3s
+Installs k3s, checks the instalation and prepare the kube/config
+=cut
 
 sub install_k3s {
-    zypper_call('in apparmor-parser') if (is_sle('>=15-sp1'));
-  # Apply additional options. For more information see https://rancher.com/docs/k3s/latest/en/installation/install-options/#options-for-installation-with-script
-    my $k3s_version = get_var("CONTAINERS_K3S_VERSION");
-    if ($k3s_version) {
-        record_info('k3s', $k3s_version);
-        assert_script_run("export INSTALL_K3S_VERSION=$k3s_version");
+    if (get_var("DISTRI") eq "alp") {
+        assert_script_run('/usr/bin/k3s-install');
     }
-    assert_script_run("export INSTALL_K3S_SYMLINK=" . get_var('K3S_SYMLINK')) if (get_var('K3S_SYMLINK'));
-    assert_script_run("export INSTALL_K3S_BIN_DIR=" . get_var('K3S_BIN_DIR')) if (get_var('K3S_BIN_DIR'));
-    assert_script_run("export INSTALL_K3S_CHANNEL=" . get_var('K3S_CHANNEL')) if (get_var('K3S_CHANNEL'));
-    # github.com/k3s-io/k3s#5946 - The kubectl delete namespace helm-ns-413 command freezes and does nothing
-    # Note: The install script starts a k3s-server by default, unless INSTALL_K3S_SKIP_START is set to true
-    assert_script_run("curl -sfL https://get.k3s.io | INSTALL_K3S_SKIP_START=true sh -s - --disable=metrics-server");
+    else {
+        zypper_call('in apparmor-parser') if (is_sle('>=15-sp1'));
+  # Apply additional options. For more information see https://rancher.com/docs/k3s/latest/en/installation/install-options/#options-for-installation-with-script
+        my $k3s_version = get_var("CONTAINERS_K3S_VERSION");
+        if ($k3s_version) {
+            record_info('k3s', $k3s_version);
+            assert_script_run("export INSTALL_K3S_VERSION=$k3s_version");
+        }
+        assert_script_run("export INSTALL_K3S_SYMLINK=" . get_var('K3S_SYMLINK')) if (get_var('K3S_SYMLINK'));
+        assert_script_run("export INSTALL_K3S_BIN_DIR=" . get_var('K3S_BIN_DIR')) if (get_var('K3S_BIN_DIR'));
+        assert_script_run("export INSTALL_K3S_CHANNEL=" . get_var('K3S_CHANNEL')) if (get_var('K3S_CHANNEL'));
+        # github.com/k3s-io/k3s#5946 - The kubectl delete namespace helm-ns-413 command freezes and does nothing
+        # Note: The install script starts a k3s-server by default, unless INSTALL_K3S_SKIP_START is set to true
+        assert_script_run("curl -sfL https://get.k3s.io | INSTALL_K3S_SKIP_START=true sh -s - --disable=metrics-server");
+    }
+
     if (get_var('REGISTRY')) {
         script_run("mkdir -p /etc/rancher/k3s");
         my $registry = registry_url();
@@ -52,12 +62,21 @@ sub install_k3s {
     script_run("mkdir -p ~/.kube");
     script_run("rm -f ~/.kube/config");
     assert_script_run("ln -s /etc/rancher/k3s/k3s.yaml ~/.kube/config");
+    record_info('k3s', "k3s installed");
 }
+
+=head2 uninstall_k3s
+Uninstalls k3s
+=cut
 
 sub uninstall_k3s {
     assert_script_run("rm -f ~/.kube/config");
     assert_script_run("/usr/local/bin/k3s-uninstall.sh");
 }
+
+=head2 install_kubectl
+Installs kubectl from the respositories
+=cut
 
 sub install_kubectl {
     if (script_run("which kubectl") != 0) {
@@ -79,10 +98,18 @@ sub install_kubectl {
     record_info('kubectl version', script_output('kubectl version --client'));
 }
 
+=head2 install_helm
+Installs helm from our repositories
+=cut
+
 sub install_helm {
     zypper_call("in helm");
     record_info('helm', script_output("helm version"));
 }
+
+=head2 install_oc
+Installs oc
+=cut
 
 sub install_oc {
     my $url = get_required_var('CONTAINER_OC_BINARY_URL');
@@ -92,4 +119,47 @@ sub install_oc {
     assert_script_run('mv oc /usr/local/bin');
     assert_script_run('oc');
 }
+
+=head2 apply_manifest
+Apply a kubernetes manifest
+=cut
+
+sub apply_manifest {
+    my ($manifest) = @_;
+
+    my $path = sprintf('/tmp/%s.yml', random_string(32));
+
+    script_output("echo -e '$manifest' > $path");
+    upload_logs($path, failok => 1);
+
+    assert_script_run("kubectl apply -f $path");
+}
+
+=head2 find_pods
+Find pods using kubectl queries
+=cut
+
+sub wait_for_k8s_job_complete {
+    my ($job) = @_;
+    assert_script_run("kubectl wait --for=condition=complete --timeout=300s job/$job");
+}
+
+=head2 wait_for_k8s_job_complete
+Wait until the job is complete
+=cut
+
+sub find_pods {
+    my ($query) = @_;
+    return script_output("kubectl get pods --no-headers -l $query -o custom-columns=':metadata.name'");
+}
+
+=head2 validate_pod_logs
+Validates that the logs contains a text
+=cut
+
+sub validate_pod_log {
+    my ($pod, $text) = @_;
+    validate_script_output("kubectl logs $pod 2>&1", qr/$text/);
+}
+
 1;

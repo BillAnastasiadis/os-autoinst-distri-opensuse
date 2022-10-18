@@ -30,6 +30,8 @@ use testapi;
 sub packages_to_install {
     my ($version, $sp, $host_distri) = @_;
     my $arch = get_required_var('ARCH');
+    my $scc_timeout = 1200;    # SCC can take really long timetimes
+
     # common packages
     my @packages = ('git-core', 'python3', 'gcc', 'jq');
     if ($host_distri eq 'ubuntu') {
@@ -43,16 +45,16 @@ sub packages_to_install {
         push @packages, 'python3-devel';
         if ($version eq "12.5") {
             # PackageHub is needed for jq
-            script_retry("SUSEConnect -p PackageHub/12.5/$arch", delay => 60, retry => 3, timeout => 300);
+            script_retry("SUSEConnect -p PackageHub/12.5/$arch", delay => 60, retry => 3, timeout => $scc_timeout);
             push @packages, 'python36-pip';
         } elsif ($version eq '15.0') {
             # On SLES15 go needs to be installed from packagehub. On later SLES it comes from the SDK module
-            script_retry("SUSEConnect -p PackageHub/15/$arch", delay => 60, retry => 3, timeout => 300);
+            script_retry("SUSEConnect -p PackageHub/15/$arch", delay => 60, retry => 3, timeout => $scc_timeout);
             push @packages, ('go1.10', 'skopeo');
         } else {
             # Desktop module is needed for SDK module, which is required for installing go
-            script_retry("SUSEConnect -p sle-module-desktop-applications/$version/$arch", delay => 60, retry => 3, timeout => 300);
-            script_retry("SUSEConnect -p sle-module-development-tools/$version/$arch", delay => 60, retry => 3, timeout => 300);
+            script_retry("SUSEConnect -p sle-module-desktop-applications/$version/$arch", delay => 60, retry => 3, timeout => $scc_timeout);
+            script_retry("SUSEConnect -p sle-module-development-tools/$version/$arch", delay => 60, retry => 3, timeout => $scc_timeout);
             push @packages, ('go', 'skopeo');
         }
     } elsif ($host_distri =~ /opensuse/) {
@@ -66,6 +68,9 @@ sub packages_to_install {
 sub run {
     my ($self) = @_;
     $self->select_serial_terminal;
+
+    # Wait for any zypper tasks in the background to finish
+    assert_script_run('while pgrep -f zypp; do sleep 1; done', timeout => 300);
 
     # CONTAINER_RUNTIME can be "docker", "podman" or both "podman,docker"
     my $engines = get_required_var('CONTAINER_RUNTIME');
@@ -122,10 +127,10 @@ sub run {
         record_info('Inspect', script_output("$engine inspect $image"));
         my $build = get_var('CONTAINER_IMAGE_BUILD');
         if ($build && $build ne 'UNKNOWN') {
-            record_info('BUILD#', "CONTAINER_IMAGE_BUILD=$build");
             my $reference = script_output(qq($engine inspect --type image $image | jq -r '.[0].Config.Labels."org.opensuse.reference"'));
-            record_info('image ref', "org.opensuse.reference: $reference");
-            die('Miss match in image build number. The image build number is different than the one triggered by the container bot!') if ($reference !~ /$build$/);
+            # Note: Both lines are aligned, thus the additional space
+            record_info('builds', "CONTAINER_IMAGE_BUILD:  $build\norg.opensuse.reference: $reference");
+            die('Missmatch in image build number. The image build number is different than the one triggered by the container bot!') if ($reference !~ /$build$/);
         }
         if (get_var('IMAGE_STORE_DATA')) {
             my $size_b = script_output("$engine inspect --format \"{{.VirtualSize}}\" $image");

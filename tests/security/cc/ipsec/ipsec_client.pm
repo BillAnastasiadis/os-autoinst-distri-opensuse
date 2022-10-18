@@ -4,7 +4,7 @@
 # SPDX-License-Identifier: FSFAP
 #
 # Summary: Run CC 'ipsec' client case
-# Maintainer: Liu Xiaojing <xiaojing.liu@suse.com>
+# Maintainer: QE Security <none@suse.de>
 # Tags: poo#101226
 
 use base 'consoletest';
@@ -42,6 +42,8 @@ sub run {
     # Test the IPSec connection
     assert_script_run('ipsec start');
     assert_script_run('stime=$(date +\'%H:%M:%S\')');
+    record_soft_failure("poo#117208 - The addition of the sleep command is a temporary workaround");
+    sleep 60;
     assert_script_run('ipsec up ikev2suse');
 
     # Test the IPSec connection

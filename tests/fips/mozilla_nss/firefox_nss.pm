@@ -8,7 +8,7 @@
 # Package: MozillaFirefox
 # Summary: FIPS mozilla-nss test for firefox : firefox_nss
 #
-# Maintainer: Ben Chou <bchou@suse.com>
+# Maintainer: QE Security <none@suse.de>
 # Tag: poo#47018, poo#58079, poo#71458, poo#77140, poo#77143,
 #      poo#80754, poo#104314, poo#104989, poo#105343
 
@@ -176,7 +176,7 @@ sub run {
 
         # Add a condition to avoid the password missed input
         # Retype password again once the password missed input
-        # The problem frequently happaned in aarch64
+        # The problem frequently happened in aarch64
         if (check_screen("firefox-password-typefield-miss")) {
             record_info("aarch64 type_missing", "Firefox password is missing to input, please refer to bsc#1179749 & poo#105343");
             type_string($fips_password, max_interval => 2);
@@ -187,11 +187,10 @@ sub run {
 
         firefox_crashreporter;
     }
-    assert_screen("firefox-url-loaded", 20);
+    assert_screen("firefox-url-loaded", $waittime);
 
     # Firefox Preferences
     firefox_preferences;
-
     # Search "Certificates" section
     search_certificates;
 
@@ -203,7 +202,7 @@ sub run {
 
     # Close Firefox
     quit_firefox;
-    assert_screen("generic-desktop", 20);
+    assert_screen("generic-desktop", $waittime);
 }
 
 sub test_flags {

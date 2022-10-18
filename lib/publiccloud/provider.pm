@@ -11,7 +11,7 @@ package publiccloud::provider;
 use testapi qw(is_serial_terminal :DEFAULT);
 use Mojo::Base -base;
 use publiccloud::instance;
-use publiccloud::utils 'is_azure';
+use publiccloud::utils qw(is_azure is_ec2);
 use Carp;
 use List::Util qw(max);
 use Data::Dumper;
@@ -29,10 +29,6 @@ has resource_name => sub { get_var('PUBLIC_CLOUD_RESOURCE_NAME', 'openqa-vm') };
 has provider_client => undef;
 
 =head1 METHODS
-
-=head2 init
-
-Needs provider specific credentials, e.g. key_id, key_secret, region.
 
 =cut
 
@@ -178,6 +174,9 @@ sub run_img_proof {
     $args{distro} //= 'sles';
     $args{tests} =~ s/,/ /g;
 
+    my $exclude = $args{exclude} // '';
+    my $beta = $args{beta} // 0;
+
     my $version = script_output('img-proof --version', 300);
     record_info("img-proof version", $version);
 
@@ -189,12 +188,20 @@ sub run_img_proof {
     $cmd .= '--no-cleanup ';
     $cmd .= '--collect-vm-info ';
     $cmd .= '--service-account-file "' . $args{credentials_file} . '" ' if ($args{credentials_file});
-    $cmd .= "--access-key-id '" . $args{key_id} . "' " if ($args{key_id});
-    $cmd .= "--secret-access-key '" . $args{key_secret} . "' " if ($args{key_secret});
+    #TODO: this if is just dirty hack which needs to be replaced with something more sane ASAP.
+    $cmd .= '--access-key-id $AWS_ACCESS_KEY_ID --secret-access-key $AWS_SECRET_ACCESS_KEY ' if (is_ec2());
     $cmd .= "--ssh-key-name '" . $args{key_name} . "' " if ($args{key_name});
     $cmd .= '-u ' . $args{user} . ' ' if ($args{user});
     $cmd .= '--ssh-private-key-file "' . $args{instance}->ssh_key . '" ';
     $cmd .= '--running-instance-id "' . ($args{running_instance_id} // $args{instance}->instance_id) . '" ';
+    $cmd .= "--beta $beta " if ($beta);
+    if ($exclude) {
+        # Split exclusion tests by command and add them individually
+        for my $excl (split ',', $exclude) {
+            $excl =~ s/^\s+|\s+$//g;    # trim spaces
+            $cmd .= "--exclude $excl ";
+        }
+    }
 
     $cmd .= $args{tests};
     record_info("img-proof cmd", $cmd);

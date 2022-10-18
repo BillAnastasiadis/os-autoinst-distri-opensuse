@@ -40,6 +40,10 @@ schedule:
 conditional_schedule:
   version_specific:
     VERSION:
+      15-SP4:
+        - console/golang
+        - console/redis
+        - '{{arch_specific}}'
       15-SP3:
         - console/openssl_nodejs
         - console/golang
@@ -68,10 +72,18 @@ conditional_schedule:
         - '{{sle15}}'
   sle15:
     VERSION:
+      15-SP4:
+        - console/firewalld
+        - console/lshw
+      15-SP3:
+        - console/firewalld
+        - console/lshw
       15-SP2:
+        - console/firewalld
         - console/lshw
       15-SP1:
+        - console/firewalld
         - console/lshw
       15:
         - console/lshw
-...
+        - console/firewalld

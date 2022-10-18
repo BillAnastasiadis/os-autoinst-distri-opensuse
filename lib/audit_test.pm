@@ -4,7 +4,7 @@
 # SPDX-License-Identifier: FSFAP
 
 # Summary: Base module for audit-test test cases
-# Maintainer: llzhao <llzhao@suse.com>
+# Maintainer: QE Security <none@suse.de>
 
 package audit_test;
 
@@ -37,7 +37,7 @@ our @EXPORT = qw(
 
 our $tmp_dir = '/tmp/';
 our $test_dir = get_var('IPSEC_TEST') ? '/usr/local/ipsec' : '/usr/local/eal4_testing';
-our $default_code_base = get_var('IPSEC_TEST') ? 'https://gitlab.suse.de/QA-APAC-I/ipsec/-/archive/main/ipsec-main.tar' : 'https://gitlab.suse.de/security/audit-test-sle15/-/archive/master/audit-test-sle15-master.tar';
+our $default_code_base = get_var('IPSEC_TEST') ? 'https://gitlab.suse.de/qe-security/ipsec/-/archive/main/ipsec-main.tar' : 'https://gitlab.suse.de/security/audit-test-sle15/-/archive/master/audit-test-sle15-master.tar';
 our $code_repo = get_var('CODE_BASE', $default_code_base);
 my @lines = split(/[\/\.]+/, $code_repo);
 our $testfile_tar = $lines[-2];
@@ -174,14 +174,14 @@ sub _parse_results_with_diff_baseline {
     my ($name, $result, $msg, $flag) = @_;
     my $softfail_tests = {};
     if ($result eq 'PASS') {
-        record_soft_failure($msg);
+        record_info('Softfail', $msg, result => 'softfail');
         $flag = 'softfail' if ($flag ne 'fail');
     }
     else {
         my $arch = get_var('ARCH');
         if ($softfail_tests->{$arch}) {
             if (my $reason = $softfail_tests->{$arch}->{$name}) {
-                record_soft_failure($msg . "\n" . $reason);
+                record_info('Softfail', $msg . "\n" . $reason, result => 'softfail');
                 return 'softfail';
             }
         }

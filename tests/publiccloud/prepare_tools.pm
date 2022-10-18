@@ -33,8 +33,8 @@ sub install_in_venv {
     assert_script_run(sprintf('curl -f -v %s/data/publiccloud/venv/%s.txt > /tmp/%s.txt', autoinst_url(), $binary, $binary)) if defined($args{requirements});
 
     my $venv = '/root/.venv_' . $binary;
-    assert_script_run("virtualenv '$venv'");
-    assert_script_run(". '$venv/bin/activate'");
+    assert_script_run("python3.9 -m venv $venv");
+    assert_script_run("source '$venv/bin/activate'");
     my $what_to_install = defined($args{requirements}) ? sprintf('-r /tmp/%s.txt', $binary) : $args{pip_packages};
     assert_script_run('pip install --force-reinstall ' . $what_to_install, timeout => $install_timeout);
     assert_script_run('deactivate');
@@ -71,7 +71,7 @@ sub run {
     ensure_ca_certificates_suse_installed();
 
     # Install prerequesite packages test
-    zypper_call('-q in python3-pip python3-devel python3-virtualenv python3-img-proof python3-img-proof-tests podman docker jq rsync');
+    zypper_call('-q in python39-pip python39-devel python3-img-proof python3-img-proof-tests podman docker jq rsync');
     record_info('python', script_output('python --version'));
     systemctl('enable --now docker');
     assert_script_run('podman ps');
@@ -114,11 +114,12 @@ sub run {
     my $terraform_version = '1.1.7';
     # Terraform in a container
     my $terraform_wrapper = <<EOT;
-#!/bin/sh
-podman run -v /root/:/root/ --rm --env-host=true -w=\$PWD docker.io/hashicorp/terraform:$terraform_version \$@
+#!/bin/bash -e
+podman run --rm -w=\$PWD -v /root/:/root/ --env-host=true docker.io/hashicorp/terraform:$terraform_version \$@
 EOT
 
-    create_script_file('terraform', '/usr/bin/terraform', $terraform_wrapper);
+    create_script_file('terraform', '/usr/local/bin/terraform', $terraform_wrapper);
+    validate_script_output("terraform -version", qr/$terraform_version/);
     record_info('Terraform', script_output('terraform -version'));
 
     # Kubectl in a container

@@ -17,19 +17,6 @@ use lockapi;
 use version_utils;
 use mmapi;
 
-
-sub permit_root_login {
-    my $self = shift;
-
-    select_console('sol', await_console => 1);
-    type_string "root";
-    wait_screen_change { type_string "\n" };
-    type_password;
-    wait_screen_change { type_string "\n" };
-    permit_root_ssh_in_sol;
-    wait_screen_change { type_string "\n" };
-}
-
 sub run {
     my $self = shift;
     my $master = get_required_var('IBTEST_IP1');
@@ -40,9 +27,9 @@ sub run {
     my $packages_master = $packages . " git-core twopence-shell-client bc";
 
 
-    $self->permit_root_login if is_ipmi;
-
     $self->select_serial_terminal;
+    permit_root_ssh_in_sol;
+
     # unload firewall. MPI- and libfabric-tests require too many open ports
     systemctl("disable --now " . opensusebasetest::firewall);
 
@@ -50,11 +37,11 @@ sub run {
     script_run('[ ! -f /root/.ssh/id_rsa ] && ssh-keygen -b 2048 -t rsa -q -N "" -f /root/.ssh/id_rsa');
 
 
-    if ($role eq 'IBTEST_MASTER') {
-        zypper_ar(get_required_var('DEVEL_TOOLS_REPO'), no_gpg_check => 1);
-        zypper_ar(get_required_var('SCIENCE_HPC_REPO'), no_gpg_check => 1, priority => 50) if get_var('SCIENCE_HPC_REPO', '');
-        $packages = $packages_master;
-    }
+    zypper_ar(get_required_var('DEVEL_TOOLS_REPO'), no_gpg_check => 1);
+    zypper_ar(get_var('SCIENCE_HPC_REPO'), no_gpg_check => 1, priority => 49) if get_var('SCIENCE_HPC_REPO', '');
+    zypper_call("ref");
+    zypper_call("dup --allow-vendor-change");
+    $packages = $packages_master if $role eq 'IBTEST_MASTER';
 
     zypper_call("in $packages", exitcode => [0, 65, 107]);
 

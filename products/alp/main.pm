@@ -35,7 +35,6 @@ sub load_selfinstall_boot_tests {
 }
 
 sub load_common_tests {
-    loadtest 'transactional/host_config';
     loadtest 'transactional/enable_selinux';
     loadtest 'microos/networking';
     loadtest 'microos/libzypp_config';
@@ -55,6 +54,11 @@ sub load_transactional_tests {
 
 return 1 if load_yaml_schedule;
 
+if (is_kernel_test()) {
+    load_kernel_tests();
+    return 1;
+}
+
 # Handle boot of images
 if (get_var('BOOT_HDD_IMAGE')) {
     load_boot_from_disk_tests;
@@ -62,12 +66,23 @@ if (get_var('BOOT_HDD_IMAGE')) {
     load_selfinstall_boot_tests;
 }
 
-load_common_tests;
-load_transactional_tests;
-load_container_tests();
+if (get_var('CONTAINER_RUNTIME') eq 'k3s') {
+    loadtest('containers/run_container_in_k3s');
+    return 1;
+}
 
+loadtest 'transactional/host_config';
+
+# Unless specified otherwise load standard tests only
+if (is_container_test()) {
+    load_container_tests();
+} else {
+    load_common_tests;
+    load_transactional_tests;
+}
+
+# Enclosing test cases
 loadtest 'console/journal_check';
 loadtest 'shutdown/shutdown';
-
 
 1;

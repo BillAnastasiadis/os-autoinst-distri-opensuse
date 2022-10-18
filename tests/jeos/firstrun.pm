@@ -99,7 +99,12 @@ sub run {
     send_key 'ret';
 
     # Show license
-    assert_screen 'jeos-license';
+    # EULA license applies for sle products that are in GM(C) phase
+    my $license = 'jeos-license';
+    if ((is_sle || is_sle_micro) && !get_var('BETA')) {
+        $license = 'jeos-license-eula';
+    }
+    assert_screen $license;
     send_key 'ret';
 
     # Accept EULA if required
@@ -122,11 +127,11 @@ sub run {
     if (is_sle || is_sle_micro) {
         assert_screen 'jeos-please-register';
         send_key 'ret';
+    }
 
-        if (is_generalhw) {
-            assert_screen 'jeos-please-configure-wifi';
-            send_key 'n';
-        }
+    if (is_generalhw && is_aarch64 && !is_leap("<15.5")) {
+        assert_screen 'jeos-please-configure-wifi';
+        send_key 'n';
     }
 
     # Our current Hyper-V host and it's spindles are quite slow. Especially
