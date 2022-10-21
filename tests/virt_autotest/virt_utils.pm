@@ -27,7 +27,7 @@ use virt_autotest::utils;
 use version_utils qw(is_sle get_os_release);
 
 our @EXPORT
-  = qw(enable_debug_logging update_guest_configurations_with_daily_build locate_sourcefile get_repo_0_prefix repl_repo_in_sourcefile repl_addon_with_daily_build_module_in_files repl_module_in_sourcefile handle_sp_in_settings handle_sp_in_settings_with_fcs handle_sp_in_settings_with_sp0 clean_up_red_disks lpar_cmd upload_virt_logs generate_guest_asset_name get_guest_disk_name_from_guest_xml compress_single_qcow2_disk get_guest_list remove_vm download_guest_assets restore_downloaded_guests is_installed_equal_upgrade_major_release generateXML_from_data check_guest_disk_type recreate_guests perform_guest_restart collect_host_and_guest_logs cleanup_host_and_guest_logs monitor_guest_console start_monitor_guest_console stop_monitor_guest_console is_developing_sles is_registered_sles);
+  = qw(enable_debug_logging update_guest_configurations_with_daily_build locate_sourcefile get_repo_0_prefix repl_repo_in_sourcefile repl_addon_with_daily_build_module_in_files repl_module_in_sourcefile handle_sp_in_settings handle_sp_in_settings_with_fcs handle_sp_in_settings_with_sp0 clean_up_red_disks lpar_cmd upload_virt_logs generate_guest_asset_name get_guest_disk_name_from_guest_xml compress_single_qcow2_disk get_guest_list download_guest_assets is_installed_equal_upgrade_major_release generateXML_from_data check_guest_disk_type recreate_guests perform_guest_restart collect_host_and_guest_logs cleanup_host_and_guest_logs monitor_guest_console start_monitor_guest_console stop_monitor_guest_console is_developing_sles is_registered_sles);
 
 sub enable_debug_logging {
 
@@ -87,8 +87,17 @@ sub get_version_for_daily_build_guest {
 }
 
 sub locate_sourcefile {
-    my $location = script_output("perl /usr/share/qa/tools/location_detect_impl.pl", 60);
-    $location =~ s/[\r\n]+$//;
+    my $location = '';
+    if (!is_s390x) {
+        $location = script_output("perl /usr/share/qa/tools/location_detect_impl.pl", 60);
+        $location =~ s/[\r\n]+$//;
+    }
+    else {
+        #S390x LPAR just be only located at DE now.
+        #No plan move S390x LPAR to the other location.
+        #So, define variable location as "de" for S390x LPAR.
+        $location = 'de';
+    }
     return $location;
 }
 
@@ -105,17 +114,7 @@ sub repl_repo_in_sourcefile {
     my $verorig = "source.http.sles-" . get_version_for_daily_build_guest . "-64";
     my $veritem = is_x86_64 ? $verorig : get_required_var('ARCH') . ".$verorig";
     if (get_var("REPO_0")) {
-        my $location = '';
-        if (!is_s390x) {
-            $location = locate_sourcefile;
-        }
-        else {
-            #S390x LPAR just be only located at DE now.
-            #No plan move S390x LPAR to the other location.
-            #So, define variable location as "de" for S390x LPAR.
-            $location = 'de';
-        }
-        my $soucefile = "/usr/share/qa/virtautolib/data/" . "sources." . "$location";
+        my $soucefile = "/usr/share/qa/virtautolib/data/" . "sources." . locate_sourcefile;
         my $newrepo = get_repo_0_prefix . get_var("REPO_0");
         # for sles15sp2+, install host with Online installer, while install guest with Full installer
         $newrepo =~ s/-Online-/-Full-/ if ($verorig =~ /15-sp[2-9]/i);
@@ -398,19 +397,6 @@ sub get_guest_list {
     return $guest_list;
 }
 
-# remove a vm listed via 'virsh list'
-sub remove_vm {
-    my $vm = shift;
-    my $is_persistent_vm = script_output "virsh dominfo $vm | sed -n '/Persistent:/p' | awk '{print \$2}'";
-    my $vm_state = script_output "virsh domstate $vm";
-    if ($vm_state ne "shut off") {
-        assert_script_run("virsh destroy $vm", 30);
-    }
-    if ($is_persistent_vm eq "yes") {
-        assert_script_run("virsh undefine $vm || virsh undefine $vm --keep-nvram", 30);
-    }
-}
-
 # Download guest image and xml from a NFS location to local
 # the image and xml is coming from a guest installation testsuite
 # need set SKIP_GUEST_INSTALL=1 in the test suite settings
@@ -501,15 +487,6 @@ sub download_guest_assets {
 
     return $guest_count;
 }
-
-#Start the guest from the downloaded vm xml and vm disk file
-sub restore_downloaded_guests {
-    my ($guest, $vm_xml_dir) = @_;
-    record_info("Guest restored", "$guest");
-    my $vm_xml = "$vm_xml_dir/$guest.xml";
-    assert_script_run("virsh define $vm_xml", 30);
-}
-
 
 sub is_installed_equal_upgrade_major_release {
     #get the version that the host is installed to

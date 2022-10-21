@@ -33,8 +33,21 @@ jobs:
         echo " requires 'Perl::Tidy', '== 20220613';" >> cpanfile
         make prepare
     - name: Run ${{ matrix.test }} tests
+      id: run_tests
       env:
         TESTS: ${{ matrix.test }}
       run: |
         git fetch origin master
-        make test
+        OUTPUT="$(make test)"
+        echo "test"
+        echo "$OUTPUT"
+        echo "::set-output name=result::$OUTPUT"
+    - uses: jwalton/gh-find-current-pr@v1
+      if: always()
+      id: finder
+    - uses: marocchino/sticky-pull-request-comment@v2
+      if: always()
+      with:
+        number: ${{ steps.finder.outputs.pr }}
+        message: |
+          ${{ steps.run_tests.outputs.result }}
