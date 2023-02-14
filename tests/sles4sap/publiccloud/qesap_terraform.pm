@@ -124,6 +124,8 @@ sub run {
     set_var("SLE_IMAGE", $provider->get_image_id());
     my $ansible_playbooks = create_playbook_section();
     my $ansible_hana_vars = create_hana_vars_section();
+    
+    assert_script_run("ls /root");
 
     # Prepare QESAP deplyoment
     qesap_prepare_env(provider => lc(get_required_var('PUBLIC_CLOUD_PROVIDER')));
@@ -154,6 +156,24 @@ sub run {
     $self->{provider} = $run_args->{my_provider} = $provider;    # Required for cleanup
     record_info("Deployment OK",);
     return 1;
+}
+
+sub post_fail_hook {
+    record_info("SOMETHING WENT WRONG");
+    my @log_files = ();
+    my $provider = lc(get_required_var('PUBLIC_CLOUD_PROVIDER'));
+    my $deployment_dir = get_var('QESAP_DEPLOYMENT_DIR', get_var('DEPLOYMENT_DIR', '/root/qe-sap-deployment'));
+    my $terraform_dir = get_var('PUBLIC_CLOUD_TERRAFORM_DIR', $deployment_dir . '/terraform');
+    push(@log_files, "$terraform_dir/$provider/terraform.tfvars");
+    push(@log_files, "$deployment_dir/ansible/playbooks/vars/hana_media.yaml");
+    push(@log_files, "$deployment_dir/ansible/playbooks/vars/hana_vars.yaml");
+    my $ls = script_output("ls $terraform_dir/$provider");
+    record_info("DIR", $ls);
+    record_info("Uploading logfiles", join("\n", @log_files));
+    while (my $file = pop @log_files) {
+        my $name = substr($file, rindex($file, '/') + 1);
+        upload_logs($file, failok => 1, log_name => "failed_$name");
+    }
 }
 
 1;

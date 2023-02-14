@@ -304,7 +304,7 @@ C<instance_type> defines the flavor of the instance. If not specified, it will l
 sub create_instances {
     my ($self, %args) = @_;
     $args{check_connectivity} //= 1;
-
+    assert_script_run("false");
     my @vms = $self->terraform_apply(%args);
     foreach my $instance (@vms) {
         record_info("INSTANCE", $instance->{instance_id});
