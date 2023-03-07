@@ -206,10 +206,4 @@ sub run {
     return 1;
 }
 
-sub post_fail_hook {
-    my ($self, $run_args) = @_;
-    qesap_upload_logs();
-    $self->SUPER::post_fail_hook;
-}
-
 1;
