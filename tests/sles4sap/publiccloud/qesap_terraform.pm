@@ -179,12 +179,12 @@ sub run {
     qesap_prepare_env(provider => lc(get_required_var('PUBLIC_CLOUD_PROVIDER')));
     qesap_create_ansible_section(ansible_section => 'create', section_content => $ansible_playbooks) if @$ansible_playbooks;
     qesap_create_ansible_section(ansible_section => 'hana_vars', section_content => $ansible_hana_vars) if %$ansible_hana_vars;
-
+    die 'Testing failure before environment creation';
     # Regenerate config files (This workaround will be replaced with full yaml generator)
     qesap_prepare_env(provider => lc(get_required_var('PUBLIC_CLOUD_PROVIDER')), only_configure => 1);
 
     die 'Terraform deployment FAILED. Check "qesap*" logs for details.'
-      if (qesap_execute(cmd => 'terraform', timeout => 3600, verbose => 1, cmd_options => "-w $workspace"));
+      if (qesap_execute(cmd => 'terraform', timeout => 3600, verbose => 1, cmd_options => "-wloipog $workspace"));
     $provider->terraform_applied(1);
     my $instances = create_instance_data($provider);
     foreach my $instance (@$instances) {
