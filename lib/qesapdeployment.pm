@@ -150,9 +150,8 @@ sub qesap_create_ansible_section {
 =cut
 
 sub qesap_pip_install {
-    zypper_call('in python39');
-    enter_cmd 'pip3.9 config --site set global.progress_bar off';
-    my $pip_ints_cmd = 'pip3.9 install --no-color --no-cache-dir ';
+    enter_cmd 'pip3.10 config --site set global.progress_bar off';
+    my $pip_ints_cmd = 'pip3.10 install --no-color --no-cache-dir ';
     my $pip_install_log = '/tmp/pip_install.txt';
     my %paths = qesap_get_file_paths();
 
@@ -274,7 +273,7 @@ sub qesap_execute {
     $exec_log .= '.log.txt';
     $exec_log =~ s/[-\s]+/_/g;
 
-    my $qesap_cmd = join(' ', 'python3.9', $paths{deployment_dir} . '/scripts/qesap/qesap.py',
+    my $qesap_cmd = join(' ', 'python3.10', $paths{deployment_dir} . '/scripts/qesap/qesap.py',
         $verbose,
         '-c', $paths{qesap_conf_trgt},
         '-b', $paths{deployment_dir},
