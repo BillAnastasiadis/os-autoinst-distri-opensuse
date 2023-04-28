@@ -370,6 +370,8 @@ sub wait_for_sync {
     my $output_fail = 0;
     record_info("Sync wait", "Waiting for data sync between nodes");
 
+    self->run_cmd(zypper -n in SAPHanaSR);
+
     # Check sync status periodically until ok or timeout
     my $start_time = time;
 
