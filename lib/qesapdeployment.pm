@@ -450,7 +450,7 @@ sub qesap_ansible_cmd {
         '-a', "\"$args{cmd}\"");
     assert_script_run("source " . QESAPDEPLOY_VENV . "/bin/activate");
 
-    $ansible_cmd = $args{host_keys_check} ? join(' ', $ansible_cmd, "-e 'ansible_ssh_common_args=\"-o UpdateHostKeys=yes -o StrictHostKeyChecking=accept-new\"'") : $ansible_cmd;
+    $ansible_cmd = $args{host_keys_check} ? join(' ', $ansible_cmd, "-e 'ansible_ssh_common_args=\"-o StrictHostKeyChecking=no\"'") : $ansible_cmd;
 
     $args{failok} ? script_run($ansible_cmd) : assert_script_run($ansible_cmd);
 

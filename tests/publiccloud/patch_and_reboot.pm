@@ -30,7 +30,6 @@ sub run {
 
     ssh_fully_patch_system($remote);
 
-    $args->{my_instance}->softreboot(timeout => get_var('PUBLIC_CLOUD_REBOOT_TIMEOUT', 600));
 }
 
 sub test_flags {
