@@ -1008,10 +1008,8 @@ sub script_output_retry_check {
     my $ignore_failure = $args{ignore_failure} // "0";
     my $result;
 
-    # Get rid of args irrelevant to script_output
-    foreach my $key (keys %args) {
-        delete $args{$key} unless $key ~~ [qw(wait type_command proceed_on_failure quiet)];
-    }
+    # test failure DO NOT MERGE
+    $args{"something_wrong"} = 50;
 
     foreach (1 .. $retry) {
         $result = script_output($cmd, %args);
