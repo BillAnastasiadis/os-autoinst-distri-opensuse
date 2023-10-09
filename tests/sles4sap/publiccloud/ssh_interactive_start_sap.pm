@@ -6,9 +6,9 @@
 # Package: openssh
 # Summary: This tests will establish the tunnel and enable the SSH interactive console
 #
-# Maintainer: qa-c@suse.de
+# Maintainer: QE-SAP <qe-sap@suse.de>
 
-use Mojo::Base 'publiccloud::basetest';
+use base 'sles4sap_publiccloud_basetest';
 use testapi;
 use serial_terminal 'select_serial_terminal';
 use utils;

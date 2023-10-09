@@ -66,7 +66,7 @@ sub load_mr_tests {
     #   [debug] ||| starting 1_saptune_notes .../mr_test_run.pm
     #   [debug] ||| finished 1_saptune_notes lib
     if (get_var('PUBLIC_CLOUD_SLES4SAP')) {
-        loadtest_mr_test('tests/publiccloud/ssh_interactive_end', run_args => $args);
+        loadtest_mr_test('tests/sles4sap/publiccloud/ssh_interactive_end_sap', run_args => $args);
         loadtest_mr_test('tests/sles4sap/publiccloud/qesap_cleanup', run_args => $args);
     }
 }

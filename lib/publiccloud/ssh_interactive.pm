@@ -14,9 +14,10 @@ use warnings;
 use testapi;
 use serial_terminal 'select_serial_terminal';
 use Utils::Backends qw(set_sshserial_dev unset_sshserial_dev);
-use version_utils qw(is_tunneled);
+use version_utils qw(is_tunneled is_public_cloud is_sle_micro);
+use publiccloud::utils qw(allow_openqa_port_selinux);
 
-our @EXPORT = qw(ssh_interactive_tunnel ssh_interactive_leave select_host_console);
+our @EXPORT = qw(ssh_interactive_tunnel ssh_interactive_leave ssh_interactive_start select_host_console);
 
 # Helper call to activate a console and establish the ssh connection therein
 sub establish_tunnel_console {
@@ -122,6 +123,34 @@ sub select_host_console {
     set_var('TUNNELED', $tunneled);
     record_info("hostname", script_output("hostname"));
     assert_script_run("true", fail_message => "host console is broken");    # basic health check
+}
+
+sub ssh_interactive_start {
+    my ($self, $args) = @_;
+    die "tunnel-console requires the TUNNELED=1 setting" unless (is_tunneled());
+
+    # Initialize ssh tunnel for the serial device, if not yet happened
+    ssh_interactive_tunnel($args->{my_instance}) if (get_var('_SSH_TUNNELS_INITIALIZED', 0) == 0);
+    die("expect ssh serial") unless (get_var('SERIALDEV') =~ /ssh/);
+    # The serial terminal needs to be activated manually, as it requires the $self argument
+    select_serial_terminal();
+    enter_cmd('ssh -t sut');
+
+    # Allow openQA on instances where SELinux is in enforcing state by default
+    allow_openqa_port_selinux() if (is_public_cloud && is_sle_micro(">=5.4"));
+
+    ## Test most important consoles to ensure they are working
+    select_console('root-console');
+    assert_script_run('test -e /dev/' . get_var('SERIALDEV'), 180);
+    assert_script_run('test $(id -un) == "root"');
+
+    select_console('user-console');
+    assert_script_run('test -e /dev/' . get_var('SERIALDEV'));
+    assert_script_run('test $(id -un) == "' . $testapi::username . '"');
+
+    select_serial_terminal();
+    assert_script_run('test -e /dev/' . get_var('SERIALDEV'));
+    assert_script_run('test $(id -un) == "root"');
 }
 
 1;
