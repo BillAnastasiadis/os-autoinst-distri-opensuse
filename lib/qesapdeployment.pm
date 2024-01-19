@@ -224,9 +224,13 @@ sub qesap_venv_cmd_exec {
     croak 'Missing mandatory cmd argument' unless $args{cmd};
     $args{timeout} //= bmwqemu::scale_timeout(90);
     $args{failok} //= 0;
+    my %paths = qesap_get_file_paths();
     my $ret;
 
     assert_script_run('source ' . QESAPDEPLOY_VENV . '/bin/activate');
+    script_run("ANSIBLE_CONFIG=$paths{deployment_dir}/ansible.cfg");
+    script_run('echo $ANSIBLE_CONFIG');
+    record_info('ANSIBLE_VAR_SET');
     $args{failok} ? $ret = script_run($args{cmd}, timeout => $args{timeout}) :
       assert_script_run($args{cmd}, timeout => $args{timeout});
     # deactivate python virtual environment
@@ -400,6 +404,27 @@ sub qesap_yaml_replace {
     qesap_upload_logs();
 }
 
+=head3 qesap_set_ansible_dir_for_json
+
+    Amends ansible.cfg with the directory where the json results will be saved
+
+=cut
+
+sub qesap_set_ansible_dir_for_json {
+    my %paths = qesap_get_file_paths();
+    my $cfg_file = $paths{deployment_dir} . '/ansible.cfg';
+
+    my $output_dir = $paths{deployment_dir}; # Or any other desired output directory
+
+    # Check if [callback_jsonfile] section exists and append or modify it
+    my $cmd_check = "grep -q '\\[callback_jsonfile\\]' $cfg_file || echo -e '\\n[callback_jsonfile]\\noutput_dir = $output_dir' >> $cfg_file";
+    my $cmd_modify = "sed -i '/\\[callback_jsonfile\\]/,/^\\[/ s|output_dir =.*|output_dir = $output_dir|' $cfg_file";
+
+    script_run($cmd_check);
+    script_run($cmd_modify);
+    script_run("cat $cfg_file");
+}
+
 =head3 qesap_execute
 
     qesap_execute(cmd => $qesap_script_cmd [, verbose => 1, cmd_options => $cmd_options] );
@@ -459,11 +484,24 @@ sub qesap_execute {
     );
 
     push(@log_files, $exec_log);
+
+    record_info('Ansible cfg', "Set json results dir in ansible.cfg");
+    qesap_set_ansible_dir_for_json();
+
     record_info('QESAP exec', "Executing: \n$qesap_cmd");
 
     my $exec_rc = qesap_venv_cmd_exec(cmd => $qesap_cmd, timeout => $args{timeout}, failok => 1);
 
     qesap_upload_logs();
+    record_info('JSON CHECK');
+    script_run('ls');
+    script_run('ls /');
+    script_run('ls /root');
+    script_run('ls .ansible');
+    script_run('ls ' . $paths{deployment_dir} . '/scripts/qesap/lib');
+    script_run('ls ' . $paths{deployment_dir} . '/scripts/qesap');
+    script_run('ls ' . $paths{deployment_dir} . '/scripts');
+    script_run('ls ' . $paths{deployment_dir});
     my @results = ($exec_rc, $exec_log);
     return @results;
 }
