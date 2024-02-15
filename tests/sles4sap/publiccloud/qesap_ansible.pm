@@ -76,8 +76,11 @@ sub run {
         # Check ssh connection for all hosts
         $instance->wait_for_ssh;
 
+
         # Skip instances without HANA db or setup without cluster
         next if ($instance_id !~ m/vmhana/) or !$ha_enabled;
+        my $checksums = $self->run_cmd(cmd => 'md5sum /usr/lib/ocf/resource.d/suse/SAPHana*');
+        record_info("MD5", "$checksums"); 
         $self->wait_for_sync();
 
         # Define initial state for both sites
