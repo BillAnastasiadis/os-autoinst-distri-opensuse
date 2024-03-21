@@ -26,6 +26,11 @@ sub run {
     # workaround for bsc#1129385
     check_iscsi_failure;
 
+    my $recs = script_output('cat /etc/iscsi/initiatorname.iscsi');
+    record_info("INITIATOR", $recs);
+    script_run('iscsiadm -m node');
+    script_run('iscsiadm -m session');
+
     # Only perform clvm to lvmlockd migration if the cluster is up and has clvm resources
     assert_script_run $crm_mon_cmd;
     my $clvm_rsc = script_run "grep -wq clvm <($crm_mon_cmd)";

@@ -22,6 +22,11 @@ sub run {
     # We don't need any logs from support server when running on REMOTE_CONTROLLER for remote SLE installation tests
     enter_cmd("journalctl -f -o short-monotonic |tee /dev/$serialdev") unless (get_var('REMOTE_CONTROLLER'));
 
+    my $output1 = script_output('systemctl status target', proceed_on_failure => 1);
+    my $output2 = script_output('journalctl -u target -b --no-pager > target-service.log', proceed_on_failure => 1);
+    record_info("TARGETCLI", $output1);
+    record_info("TARGETS.CONF", $output2);
+
     if (check_var("REMOTE_CONTROLLER", "ssh") || check_var("REMOTE_CONTROLLER", "vnc")) {
         mutex_create("installation_done");
     }
