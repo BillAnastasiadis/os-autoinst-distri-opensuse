@@ -324,7 +324,7 @@ sub wait_hana_node_up {
             cmd => "sudo systemctl is-system-running",
             timeout => 5,
             proceed_on_failure => 1);
-        return if ($out =~ m/running/);
+        return time() - $start_time if ($out =~ m/running/);
         record_info("WAIT_FOR_SYSTEM", "System state: $out");
         sleep 10;
     }
@@ -379,9 +379,8 @@ sub stop_hana {
         my $out = $self->{my_instance}->wait_for_ssh(timeout => 60, wait_stop => 1);
         record_info("Wait ssh disappear end", "out:" . ($out // 'undefined'));
         # wait for node to be ready
-        wait_hana_node_up($self->{my_instance}, timeout => 900);
-        $out = $self->{my_instance}->wait_for_ssh(timeout => 900);
-        record_info("Wait ssh is back again", "out:" . ($out // 'undefined'));
+        my $time = wait_hana_node_up($self->{my_instance}, timeout => 900);
+        record_info("ssh is back again", "time:" . ($time // 'undefined'));
     }
     else {
         my $sapadmin = lc(get_required_var('INSTANCE_SID')) . 'adm';
