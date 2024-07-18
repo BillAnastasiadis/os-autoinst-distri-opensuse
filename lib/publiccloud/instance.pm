@@ -413,9 +413,10 @@ sub wait_for_ssh {
         # or instance address changes during VM reboots.
         script_run("ssh-keyscan $args{public_ip} | tee -a ~/.ssh/known_hosts");
         while (($duration = time() - $start_time) < $args{timeout}) {
+            record_info("RUN $retry", $sysout);
             # timeout recalculated removing consumed time until now
             $sysout = $self->ssh_script_output(cmd => 'sudo systemctl is-system-running',
-                timeout => $args{timeout} - $duration, proceed_on_failure => 1, username => $args{username});
+                timeout => 90, proceed_on_failure => 1, username => $args{username});
             # result check
             if ($sysout =~ m/initializing|starting/) {    # still starting
                 $exit_code = undef;

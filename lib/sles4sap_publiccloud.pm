@@ -380,7 +380,7 @@ sub stop_hana {
         record_info("Wait ssh disappear end", "out:" . ($out // 'undefined'));
         # wait for node to be ready
         wait_hana_node_up($self->{my_instance}, timeout => 900);
-        $out = $self->{my_instance}->wait_for_ssh(timeout => 900);
+        $out = $self->{my_instance}->wait_for_ssh(timeout => 1600);
         record_info("Wait ssh is back again", "out:" . ($out // 'undefined'));
     }
     else {
