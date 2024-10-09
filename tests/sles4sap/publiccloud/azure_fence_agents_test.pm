@@ -28,10 +28,6 @@ sub test_flags {
 
 sub run {
     my ($self, $run_args) = @_;
-
-    # Needed to have peering and ansible state propagated in post_fail_hook
-    $self->import_context($run_args);
-
     my $instances = $self->{instances} = $run_args->{instances};
     my $provider_client = $run_args->{instances}[0]{provider}{provider_client};
     my $fence_agent_configuration = get_var('AZURE_FENCE_AGENT_CONFIGURATION', 'msi');
@@ -53,7 +49,8 @@ sub run {
     my $fence_agent_cmd = join(' ',
         'fence_azure_arm',
         "-C \'\'",
-        '--action=list',
+        '--action=status',
+        '--plug=vmhana01',
         "--resourceGroup=$resource_group",
         '--subscriptionId=$SUBSCRIPTION_ID');
 
@@ -64,15 +61,14 @@ sub run {
         '--tenantId=$TENANT_ID') if $fence_agent_configuration eq 'spn';
 
     select_serial_terminal;
-    # prepare bashrc file - this way credentials are not presented in outputs
+    # prepare bashrc file - this way credentials ar enot presented in outputs
     save_tmp_file('bashrc', $bashrc_vars);
     assert_script_run('curl ' . autoinst_url . '/files/bashrc -o /tmp/bashrc');
 
     foreach my $instance (@$instances) {
         $self->{my_instance} = $instance;
-        # do not probe VMs that are not part of the cluster
+        # do not probe VMs that are nto a part of cluster
         next unless grep(/^$instance->{instance_id}$/, @cluster_nodes);
-        $instance->wait_for_ssh(scan_ssh_host_key => 1);
         my $scp_cmd = join('', 'scp /tmp/bashrc ',
             $instance->{username},
             '@', $instance->{public_ip},
