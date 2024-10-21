@@ -50,9 +50,11 @@ sub get_packagebins_in_modules {
     my $response = Mojo::UserAgent->new->get("https://smelt.suse.de/api/v1/basic/maintained/$package_name/")->result->body;
     my $graph = JSON->new->utf8->decode($response);
     # Get the modules to which this package provides binaries.
+    record_info("MODULES", "@$module_ref");
     my @existing_modules = grep { exists($graph->{$_}) } @{$module_ref};
     my @arr;
     foreach my $m (@existing_modules) {
+        record_info("Module", "$m");
         # The refs point to a hash of hashes. We only care about the value with
         # the codestream key. The Update key is different for every SLE
         # Codestream so instead of maintaining a LUT we just use a regex for it.
@@ -61,6 +63,7 @@ sub get_packagebins_in_modules {
     }
     # Return a hash of hashes, hashed by name. The values are hashes with the keys 'name', 'supportstatus' and
     # 'package'.
+    record_info("ARRAY_RET", "@arr");
     return map { $_->{name} => $_ } @arr;
 }
 
