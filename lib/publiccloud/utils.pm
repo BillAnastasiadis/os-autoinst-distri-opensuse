@@ -117,7 +117,11 @@ sub registercloudguest {
     $instance->ssh_script_run(cmd => "rpm -qa cloud-regionsrv-client");
     record_info('REG SERVERS', 'title pretty self-explanatory, look next command output');
     $instance->ssh_script_run(cmd => 'cat /etc/regionserverclnt.cfg');
-    $instance->ssh_script_retry(cmd => "sudo $suseconnect -r $regcode", timeout => 420, retry => 3, delay => 120);
+    $instance->ssh_script_run(cmd => "sudo sed -i -E \"s/(,\\s*)?(([0-9a-fA-F]{1,4}:){7,7}[0-9a-fA-F]{1,4}|([0-9a-fA-F]{1,4}:){1,7}:|([0-9a-fA-F]{1,4}:){1,6}:[0-9a-fA-F]{1,4}|([0-9a-fA-F]{1,4}:){1,5}(:[0-9a-fA-F]{1,4}){1,2}|([0-9a-fA-F]{1,4}:){1,4}(:[0-9a-fA-F]{1,4}){1,3}|([0-9a-fA-F]{1,4}:){1,3}(:[0-9a-fA-F]{1,4}){1,4}|([0-9a-fA-F]{1,4}:){1,2}(:[0-9a-fA-F]{1,4}){1,5}|[0-9a-fA-F]{1,4}:((:[0-9a-fA-F]{1,4}){1,6})|:((:[0-9a-fA-F]{1,4}){1,7}|:)|fe80:(:[0-9a-fA-F]{0,4}){0,4}%[0-9a-zA-Z]{1,}|::(ffff(:0{1,4}){0,1}:){0,1}((25[0-5]|(2[0-4]|1{0,1}[0-9]){0,1}[0-9])\\.){3,3}(25[0-5]|(2[0-4]|1{0,1}[0-9]){0,1}[0-9])|([0-9a-fA-F]{1,4}:){1,4}:((25[0-5]|(2[0-4]|1{0,1}[0-9]){0,1}[0-9])\\.){3,3}(25[0-5]|(2[0-4]|1{0,1}[0-9]){0,1}[0-9]))(,|\\\$)/\\4/g\" /etc/regionserverclnt.cfg");
+    $instance->ssh_script_run(cmd => 'cat /etc/regionserverclnt.cfg');
+    $instance->ssh_script_retry(cmd => "sudo $suseconnect --clean", timeout => 420, retry => 3, delay => 120);
+    $instance->ssh_script_run(cmd => 'cat /etc/regionserverclnt.cfg');
+    $instance->ssh_script_retry(cmd => "sudo $suseconnect -f /etc/regionserverclnt.cfg -r $regcode", timeout => 420, retry => 3, delay => 120);
     if (script_run('ssh -O check ' . $instance->username . '@' . $instance->public_ip) == 0) {
         assert_script_run('ssh -O exit ' . $instance->username . '@' . $instance->public_ip);
     }
