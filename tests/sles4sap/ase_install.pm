@@ -93,9 +93,12 @@ sub run {
     my $instdir = $self->download_ase_assets;
     file_content_replace($self->ASE_RESPONSE_FILE, '%PASSWORD%', $testapi::password);
     upload_logs $self->ASE_RESPONSE_FILE;
-    assert_script_run "pushd $instdir";
+    script_run "pushd $instdir";
     # In manual tests, it took ca. 35 minutes to install ASE, so expecting 1 hour to be enough
-    assert_script_run './setup.bin -i silent -f $HOME/' . $self->ASE_RESPONSE_FILE, timeout => 3600;
+    script_run './setup.bin -i silent -f $HOME/' . $self->ASE_RESPONSE_FILE, timeout => 3600;
+    my $logase = script_output("cat /opt/sap/log/ASE_Suite.log");
+    record_info("LOG_ASE", "$logase");
+    die;
     assert_script_run 'popd';
     $self->upload_ase_logs;
 }
