@@ -578,7 +578,7 @@ sub qesap_execute {
 
 =item B<RETRIES> - number of retries in case of expected error
 
-=item B<ERROR_STRING> - error string to look for
+=item B<ERROR_STRING> - error string to look for OR array of error strings
 
 =item B<destroy_terraform> - destroy terraform before retrying terraform apply
 
@@ -592,6 +592,11 @@ sub qesap_execute_conditional_retry {
     my $verbose = $args{verbose} ? "--verbose" : "";
     $args{timeout} //= bmwqemu::scale_timeout(90);
     $args{retries} //= 1;
+    my $max_retries = $args{retries};
+
+    my @error_strings = ref($args{error_string}) eq 'ARRAY'
+        ? @{$args{error_string}}
+        : ($args{error_string});
 
     my @ret = qesap_execute(cmd => $args{cmd},
         verbose => $args{verbose},
@@ -600,22 +605,26 @@ sub qesap_execute_conditional_retry {
 
     while ($args{retries} > 0) {
         if ($ret[0]) {
-            if (qesap_file_find_string(file => $ret[1], search_string => $args{error_string})) {
+            if (qesap_file_find_string(file => $ret[1], search_string => \@error_strings)) {
                 record_info('DETECTED ' . uc($args{cmd}) . ' ERROR', $args{error_string});
 
                 # Executing terraform destroy before retrying terraform apply
                 if ($args{destroy_terraform}) {
-                    qesap_execute(
+                    my @destroy_ret = qesap_execute(
                         cmd => 'terraform',
                         cmd_options => '-d',
                         logname => "qesap_exec_terraform_destroy_before_retry$args{retries}.log.txt",
                         verbose => 1,
                         timeout => 1200);
+                    if ($destroy_ret[0] != 0) {
+                        die "Terraform destroy exited with non-zero code.";
+                    }
                 }
 
                 @ret = qesap_execute(cmd => $args{cmd},
-                    logname => 'qesap_' . $args{cmd} . '_retry_' . $args{retries} . '.log.txt',
-                    timeout => $args{timeout});
+                    logname => 'qesap_' . $args{cmd} . '_retry_' . $max_retries - $args{retries} . '.log.txt',
+                    timeout => $args{timeout},
+                    verbose => $args{verbose});
                 if ($ret[0] == 0) {
                     record_info('QESAP_EXECUTE RETRY PASS');
                     last;
@@ -652,16 +661,27 @@ sub qesap_execute_conditional_retry {
 
 =item B<FILE> - Path to the Ansible log file. (Required)
 
-=item B<SEARCH_STRING> - String to search for in the log file. (Required)
+=item B<SEARCH_STRING> - String or Array of strings to search for in the log file. (Required)
 
 =back
 =cut
 
 sub qesap_file_find_string {
     my (%args) = @_;
-    foreach (qw(file search_string)) { croak "Missing mandatory $_ argument" unless $args{$_}; }
-    my $ret = script_run("grep \"$args{search_string}\" $args{file}");
-    return $ret == 0 ? 1 : 0;
+    foreach (qw(file search_string)) {
+        croak "Missing mandatory $_ argument" unless $args{$_};
+    }
+
+    my @strings =
+      ref $args{search_string} eq 'ARRAY'
+      ? @{$args{search_string}}
+      : ($args{search_string});
+
+    for my $s (@strings) {
+        my $ret = script_run("grep \"$s\" $args{file}");
+        return 1 if $ret == 0;
+    }
+    return 0;
 }
 
 =head3 qesap_get_inventory
