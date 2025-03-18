@@ -186,6 +186,13 @@ sub sles4sap_cleanup {
     # make sure the serial terminal is NOT blocked
     type_string('', terminate_with => 'ETX');
 
+    # Upload supportconfig logs if available after failure during cleanup
+    record_info("SUPPORTCONFIG", "Collecting supportconfig logs");
+    if ($self->{run_args} && $self->{run_args}->{my_instance} && $self->{result} && $self->{result} eq 'fail') {
+        record_info("GOT INSIDE THE LOOP");
+        $self->{run_args}->{my_instance}->upload_supportconfig_log();
+    }
+
     qesap_cluster_logs();
     qesap_upload_logs();
     upload_logs('/var/tmp/ssh_sut.log', failok => 1, log_name => 'ssh_sut_log.txt');
