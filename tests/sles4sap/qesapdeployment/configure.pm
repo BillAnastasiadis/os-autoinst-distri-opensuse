@@ -95,6 +95,8 @@ sub run {
     $variables{MAIN_ADDRESS_RANGE} = $peering_settings{main_address_range};
     if (check_var('PUBLIC_CLOUD_PROVIDER', 'AZURE')) {
         $variables{SUBNET_ADDRESS_RANGE} = $peering_settings{subnet_address_range};
+        $variables{IBSMIRROR_RESOURCE_GROUP} = get_var('QESAPDEPLOY_IBSMIRROR_RESOURCE_GROUP', '');
+        $variables{IBSMIRROR_VNET} = get_var('QESAPDEPLOY_IBSMIRROR_VNET', '');
         if ($variables{FENCING} eq 'native') {
             $variables{AZURE_NATIVE_FENCING_AIM} = get_var('QESAPDEPLOY_AZURE_FENCE_AGENT_CONFIGURATION', 'msi');
             if ($variables{AZURE_NATIVE_FENCING_AIM} eq 'spn') {

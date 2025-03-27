@@ -19,9 +19,11 @@ sub run {
         if (get_var("QESAPDEPLOY_IBSMIRROR_RESOURCE_GROUP")) {
             my $rg = qesap_az_get_resource_group();
             my $ibs_mirror_rg = get_var('QESAPDEPLOY_IBSMIRROR_RESOURCE_GROUP');
-            qesap_az_vnet_peering(source_group => $rg, target_group => $ibs_mirror_rg);
+            my $ibs_mirror_vnet = get_var('QESAPDEPLOY_IBSMIRROR_VNET', '');
+            #qesap_az_vnet_peering(source_group => $rg, target_group => $ibs_mirror_rg);
             qesap_add_server_to_hosts(name => 'download.suse.de', ip => get_required_var("QESAPDEPLOY_IBSMIRROR_IP"));
-            qesap_az_vnet_peering_delete(source_group => $rg, target_group => $ibs_mirror_rg);
+            #qesap_az_vnet_peering_delete(source_group => $rg, target_group => $ibs_mirror_rg);
+            qesap_az_get_active_peerings(rg => $ibs_mirror_rg , vnet => $ibs_mirror_vnet);
         }
     }
     elsif ($provider_setting eq 'EC2') {
