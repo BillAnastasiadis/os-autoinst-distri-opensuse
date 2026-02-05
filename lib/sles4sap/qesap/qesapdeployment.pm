@@ -252,7 +252,27 @@ sub qesap_venv_cmd_exec {
     $ret = script_retry($cmd, timeout => $args{timeout}, retry => $retry, die => 0);
 
     # deactivate python virtual environment
-    script_run('deactivate');
+    my $cleared = 0;
+    for my $i (1..5) {
+        record_info("DEACTIVATE_$i ATTEMPT", "Attempt $i");
+        my $ok = eval {
+            script_run('deactivate', timeout => 10);
+            my $rc = script_run('[ -z "$VIRTUAL_ENV" ]', timeout => 10);
+            $cleared = (defined($rc) && $rc == 0);
+            1;
+        };
+
+        last if $ok && $cleared;
+
+        record_info('DEACTIVATE_RETRY', "Attempt $i failed: " . ($@ ? $@ : 'VIRTUAL_ENV still set'));
+        sleep 2;
+    }
+
+    record_info('WARNING', 'Virtualenv still active after 5 attempts') unless $cleared;
+    if (!$cleared) {
+        eval { type_string('', terminate_with => 'ETX'); };
+        record_info('CTRL+C SENT');
+    }
 
     return $ret;
 }
