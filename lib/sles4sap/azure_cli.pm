@@ -45,6 +45,7 @@ our @EXPORT = qw(
   az_vm_as_create
   az_vm_as_list
   az_vm_as_show
+  az_vm_as_id
   az_img_from_vhd_create
   az_vm_create
   az_vm_list
@@ -749,6 +750,37 @@ sub az_vm_as_show(%args) {
         '--name', $args{name},
         '-o table');
     assert_script_run($az_cmd);
+}
+
+=head2 az_vm_as_id
+
+    az_vm_as_id(resource_group => 'openqa-rg', name => 'openqa-as');
+
+Get the id of an availability set.
+
+=over
+
+=item B<resource_group> - existing resource group where to create the availability set
+
+=item B<name> - name of the availability set
+
+=back
+=cut
+
+sub az_vm_as_id(%args) {
+    foreach (qw(resource_group name)) {
+        croak("Argument < $_ > missing") unless $args{$_}; 
+    }
+
+    my $az_cmd = join(' ', 'az vm availability-set show',
+        '--resource-group', $args{resource_group},
+        '--name', $args{name},
+        '--query id -o tsv');
+        
+    my $id = script_output($az_cmd);
+    $id =~ s/^\s+|\s+$//g; 
+    
+    return $id;
 }
 
 =head2 az_img_from_vhd_create

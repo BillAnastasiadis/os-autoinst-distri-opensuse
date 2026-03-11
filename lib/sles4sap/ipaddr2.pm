@@ -324,6 +324,9 @@ sub ipaddr2_infra_deploy(%args) {
     az_vm_as_show(
         resource_group => $rg,
         name => $as);
+    my $as_id = az_vm_as_id(
+        resource_group => $rg,
+        name => $as);
 
     my $storage_name;
     if ($args{diagnostic}) {
@@ -349,7 +352,7 @@ sub ipaddr2_infra_deploy(%args) {
         public_ip => "");
 
     my %vm_create_internal_args = %vm_create_generic_args;
-    $vm_create_internal_args{availability_set} = $as;
+    $vm_create_internal_args{availability_set} = $as_id;
     $vm_create_internal_args{nsg} = $nsg;
     $vm_create_internal_args{public_ip} = "";
     $vm_create_internal_args{custom_data} = $args{cloudinit_profile} if ($args{cloudinit_profile});
