@@ -249,18 +249,21 @@ sub registercloudguest {
 
     check_dns($instance);
     check_dns($instance, retry => 12, delay => 10);
-    check_dns($instance, softfail => 1);
+    check_dns($instance, softfail => 1, reload_dns => 1);
 
 Check name resolution on the instance before it registers (poo#207630):
 C</etc/resolv.conf> must name a nameserver, and C<scc.suse.com>, or the host in
 C<PUBLIC_CLOUD_DNS_CHECK_HOST>, must resolve.
 
 C<retry> and C<delay> control retries for each check (defaults: 6 and 10 seconds).
-These are not a strict overall deadline: command execution also takes time.
+Command execution time is additional.
 
-A resolution that needed retries is recorded with the time it took. On failure
-the resolver and network state is recorded, then the test dies. Set C<softfail>
-to 1 to record a soft failure and continue instead (default: 0).
+On failure, collect diagnostics and die unless C<softfail> is enabled.
+C<reload_dns> additionally asks NetworkManager to regenerate its DNS
+configuration and records the state afterward. The original failure is still
+reported, even if the reload restores resolution.
+
+C<softfail> and C<reload_dns> both default to 0.
 
 =cut
 
@@ -270,7 +273,6 @@ sub check_dns {
     my $host = get_var('PUBLIC_CLOUD_DNS_CHECK_HOST', 'scc.suse.com');
     die "PUBLIC_CLOUD_DNS_CHECK_HOST '$host' is not a host name" if $host !~ /^[A-Za-z0-9.-]+$/;
 
-    # Diagnose persistent failures before dying or recording a soft failure.
     my %retry = (
         retry => $args{retry} // 6,
         delay => $args{delay} // 10,
@@ -294,6 +296,16 @@ sub check_dns {
         'sudo journalctl -b --no-pager -u NetworkManager -u wicked -u systemd-resolved | tail -n 50');
     my $out = $instance->ssh_script_output(cmd => '(' . join('; ', map { "echo '# $_'; $_" } @diag) . ') 2>&1', timeout => 120, proceed_on_failure => 1);
     record_info('DNS diagnostics', $out, result => $softfail ? 'softfail' : 'fail');
+
+    if ($args{reload_dns}) {
+        record_info('DNS reload', $instance->ssh_script_output(
+                cmd => 'sudo -n nmcli general reload dns-rc 2>&1',
+                timeout => 30, proceed_on_failure => 1));
+        record_info('DNS after reload', $instance->ssh_script_output(
+                cmd => "(ls -l /etc/resolv.conf; cat /etc/resolv.conf; getent ahosts $host) 2>&1",
+                timeout => 30, proceed_on_failure => 1));
+    }
+
     if ($softfail) {
         record_soft_failure("poo#207630: DNS check failed: $problem");
     } else {
