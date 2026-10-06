@@ -894,6 +894,76 @@ sub wait_for_sync {
     }
 }
 
+# Poll angi recovery using process-bounded SSH commands. Fencing may
+# interrupt a connection after an SSH availability check.
+sub _wait_for_pacemaker_angi {
+    my ($self, %args) = @_;
+    my $timeout = bmwqemu::scale_timeout($args{timeout} // 300);
+    my $start_time = time;
+    my %command_args = (
+        rc_only => 1,
+        apply_graceful_timeout => 1,
+        quiet => 1,
+        timeout => 30,
+    );
+
+    while (time - $start_time < $timeout) {
+        sleep 15;
+        last if time - $start_time >= $timeout;
+
+        my $pm_rc = eval {
+            $self->run_cmd(
+                cmd => 'systemctl --no-pager is-active pacemaker',
+                %command_args
+            );
+        };
+        my $cs_rc = eval {
+            $self->run_cmd(
+                cmd => 'systemctl --no-pager is-active corosync',
+                %command_args
+            );
+        };
+
+        record_info('WAIT CLUSTER',
+            'pacemaker rc=' . (defined($pm_rc) ? $pm_rc : 'unavailable')
+              . ' corosync rc=' . (defined($cs_rc) ? $cs_rc : 'unavailable')
+              . ' elapsed=' . (time - $start_time));
+
+        next unless defined($pm_rc) && $pm_rc == 0
+          && defined($cs_rc) && $cs_rc == 0;
+
+        my $cib_rc = eval {
+            $self->run_cmd(cmd => $crm_mon_cmd, %command_args);
+        };
+        next unless defined($cib_rc) && $cib_rc == 0;
+
+        record_info('Cluster Ready',
+            'Pacemaker and Corosync are active and crm_mon succeeded.');
+        return 1;
+    }
+
+    for my $diagnostic (
+        ['Pacemaker status', 'systemctl --no-pager status pacemaker'],
+        ['Corosync status', 'systemctl --no-pager status corosync'],
+        ['Corosync Info', 'journalctl -u corosync -n 80 --no-pager']
+      )
+    {
+        my ($title, $cmd) = @$diagnostic;
+        my $rc = eval {
+            $self->run_cmd(cmd => $cmd, %command_args);
+        };
+        my $error = $@;
+
+        record_info($title,
+            "$cmd\n"
+              . (defined($rc) ? "Exit code: $rc" : "Command failed: $error")
+              . "\nSee serial-terminal output for command output.",
+            result => 'fail');
+    }
+
+    die('wait_for_pacemaker [ERROR] Cluster services failed to fully initialize within timeout');
+}
+
 =head2 wait_for_pacemaker
     wait_for_pacemaker([timeout => $timeout]);
 
@@ -908,6 +978,10 @@ sub wait_for_sync {
 
 sub wait_for_pacemaker {
     my ($self, %args) = @_;
+
+    return _wait_for_pacemaker_angi($self, %args)
+      if get_var('USE_SAP_HANA_SR_ANGI');
+
     my $timeout = bmwqemu::scale_timeout($args{timeout} // 300);
     my $start_time = time;
     my $systemd_pm_cmd = 'systemctl --no-pager is-active pacemaker';
