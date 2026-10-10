@@ -356,9 +356,14 @@ sub is_hana_online {
         $db_status = $self->get_replication_info()->{online} eq "true" ? 1 : 0;
         return $db_status unless $args{wait_for_start};
 
-        # Reset pass counter in case of fail.
-        $consecutive_passes = $db_status ? ++$consecutive_passes : 0;
-        die("DB did not start within defined timeout: $timeout s") if (time - $start_time > $timeout);
+        # Require three consecutive online results within the timeout.
+        $consecutive_passes = $db_status ? $consecutive_passes + 1 : 0;
+
+        die("HANA did not achieve three consecutive online checks within $timeout s "
+              . "(last online=$db_status, consecutive=$consecutive_passes)")
+          if (time - $start_time > $timeout);
+
+        return 1 if $consecutive_passes >= 3;
         sleep 10;
     }
     return $db_status;
