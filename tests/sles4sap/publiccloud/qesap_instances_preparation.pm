@@ -87,7 +87,7 @@ sub run {
         $instance->update_instance_ip();
         $instance->wait_for_ssh();
 
-        my $real_hostname = $instance->ssh_script_output(cmd => 'hostname', username => 'cloudadmin');
+        my $real_hostname = ssh_output_no_banner($instance, cmd => 'hostname', username => 'cloudadmin');
         # We expect hostnames reported by terraform to match the actual hostnames in Azure and GCE
         die "Expected hostname $expected_hostname is different than actual hostname [$real_hostname]"
           if ((is_azure() || is_gce()) && ($expected_hostname ne $real_hostname));

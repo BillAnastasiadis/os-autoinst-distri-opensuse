@@ -549,6 +549,24 @@ subtest "[wait_hana_node_up] with ssh_keepalive" => sub {
     ok($captured_opts[0] !~ /ServerAliveInterval/, "Keepalive options not injected in wait_hana_node_up by default");
 };
 
+subtest "[wait_hana_node_up] banner is not used as system state" => sub {
+    my $mock_instance = Test::MockObject->new();
+    $mock_instance->{public_ip} = '1.2.3.4';
+    my @calls;
+    # The banner contains the word 'running', but the system is still starting
+    $mock_instance->mock('ssh_script_output', sub {
+            my ($self, %args) = @_;
+            push @calls, $args{cmd};
+            return "Do not use while maintenance is running\n$marker\nstarting" });
+
+    my $sles4sap_pc_mock = Test::MockModule->new('sles4sap::publiccloud', no_auto => 1);
+    $sles4sap_pc_mock->redefine(script_run => sub { return 0; });
+    $sles4sap_pc_mock->redefine(record_info => sub { note(join(' ', 'RECORD_INFO -->', @_)); });
+
+    throws_ok { sles4sap::publiccloud::wait_hana_node_up($mock_instance, timeout => 10) } qr/returns: starting at /, 'Timeout with the real system state';
+    like $calls[0], qr/^echo \Q$marker\E; sudo systemctl is-system-running$/, 'Marker is used';
+};
+
 subtest "[stop_hana] missing online_string croaks" => sub {
     my $sles4sap_publiccloud = Test::MockModule->new('sles4sap::publiccloud', no_auto => 1);
     my $self = sles4sap::publiccloud->new();
