@@ -35,6 +35,7 @@ use sles4sap;
 use saputils;
 
 our @EXPORT = qw(
+  ssh_output_no_banner
   run_cmd
   run_cmd_retry
   get_promoted_hostname
@@ -78,6 +79,55 @@ our @EXPORT = qw(
 
     Package with common methods and default or constant  values for sles4sap tests in the cloud
 
+=cut
+
+# Marker that separates the ssh pre-login output from the output of the remote command.
+use constant SSH_OUTPUT_MARKER => 'QESAP_SSH_OUTPUT_START';
+
+=head2 ssh_output_no_banner
+    ssh_output_no_banner($instance, cmd => 'command', [username => 'user', timeout => 90, ...]);
+
+    Runs C<cmd> on C<$instance> with C<ssh_script_output> and returns only
+    the output of C<cmd>, without the sshd pre-login banner.
+
+    The ssh client writes the sshd banner (sshd_config C<Banner>) to stderr.
+    The serial terminal shows stderr and stdout together, thus the banner is
+    in the output of C<ssh_script_output>. An ssh client option cannot remove
+    only the banner: C<LogLevel> controls the banner and the debug log together.
+
+    This function adds an C<echo> of a marker in front of C<cmd> and removes
+    all the output up to the marker, included. sshd sends the banner before the
+    remote command starts, thus the banner is always before the marker.
+    The function uses the same ssh connection as C<cmd>: it does not add a
+    connection.
+
+    If there is no banner, the function returns the same output as
+    C<ssh_script_output>. If the output does not contain the marker (for example,
+    the ssh connection failed), the function returns the output without changes.
+
+=over
+
+=item B<instance> - instance object to run the command on
+
+=item B<cmd> - command string to run on the instance
+
+=item B<...> - all the other arguments go to C<ssh_script_output>
+
+=back
+=cut
+
+sub ssh_output_no_banner {
+    my ($instance, %args) = @_;
+    croak('Argument <cmd> missing') unless $args{cmd};
+    my $marker = SSH_OUTPUT_MARKER;
+    $args{cmd} = "echo $marker; $args{cmd}";
+    my $out = $instance->ssh_script_output(%args);
+    return $out unless defined $out;
+    # Do not use '^': if the banner has no final newline, the marker is not at the start of a line.
+    $out =~ s/\A.*?\Q$marker\E(?:\r?\n|\z)//s;
+    return $out;
+}
+
 =head2 run_cmd
     run_cmd(cmd => 'command', [runas => 'user', timeout => 60]);
 
@@ -85,6 +135,8 @@ our @EXPORT = qw(
     All commands are executed through C<sudo>.
     If 'runas' defined, command will be executed as specified user,
     otherwise it will be executed as root.
+    The returned output does not contain the sshd pre-login banner,
+    see C<ssh_output_no_banner>.
 
 =over
 
@@ -133,7 +185,7 @@ sub run_cmd {
         return $self->{my_instance}->ssh_script_run(cmd => "sudo $cmd", timeout => $timeout, %args);
     }
     else {
-        my $out = $self->{my_instance}->ssh_script_output(cmd => "sudo $cmd", timeout => $timeout, %args);
+        my $out = ssh_output_no_banner($self->{my_instance}, cmd => "sudo $cmd", timeout => $timeout, %args);
         record_info("$title output - $self->{my_instance}->{instance_id}", $out) unless ($args{quiet});
         return $out;
     }

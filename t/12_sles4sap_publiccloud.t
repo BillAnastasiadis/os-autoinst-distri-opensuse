@@ -74,6 +74,82 @@ subtest "[run_cmd] with ssh_keepalive" => sub {
     ok(!defined($captured_opts[0]) || $captured_opts[0] !~ /ServerAliveInterval/, "Keepalive options not injected by default");
 };
 
+my $marker = sles4sap::publiccloud::SSH_OUTPUT_MARKER;
+my $banner = "Authorized users only. All activity may be monitored and reported.\n";
+
+subtest "[ssh_output_no_banner] missing cmd" => sub {
+    my $mock_instance = Test::MockObject->new();
+    dies_ok { ssh_output_no_banner($mock_instance) } 'Expected failure: missing mandatory argument cmd';
+};
+
+subtest "[ssh_output_no_banner] command and arguments" => sub {
+    my $mock_instance = Test::MockObject->new();
+    my %captured;
+    $mock_instance->mock('ssh_script_output', sub {
+            my ($self, %args) = @_;
+            %captured = %args;
+            return "$marker\nvmhana01" });
+
+    ssh_output_no_banner($mock_instance, cmd => 'hostname', username => 'cloudadmin', timeout => 42, proceed_on_failure => 1);
+    is $captured{cmd}, "echo $marker; hostname", 'Marker is echoed before the command, in the same ssh call';
+    is $captured{username}, 'cloudadmin', 'username is passed through';
+    is $captured{timeout}, 42, 'timeout is passed through';
+    is $captured{proceed_on_failure}, 1, 'proceed_on_failure is passed through';
+};
+
+subtest "[ssh_output_no_banner] output parsing" => sub {
+    my $mock_instance = Test::MockObject->new();
+    my $ssh_output;
+    $mock_instance->mock('ssh_script_output', sub { return $ssh_output });
+
+    my @cases = (
+        ["$marker\nvmhana01", 'vmhana01', 'No banner: output is the same as without marker'],
+        ["$banner$marker\nvmhana01", 'vmhana01', 'Banner is removed'],
+        ["${banner}Second banner line with 2.0 version\n$marker\nSAPHanaSR-angi-1.2.10", 'SAPHanaSR-angi-1.2.10', 'Multi-line banner is removed'],
+        ["Banner without final newline$marker\nvmhana01", 'vmhana01', 'Banner without final newline is removed'],
+        ["$banner$marker\nline1\n\nline3", "line1\n\nline3", 'Multi-line command output is kept as it is'],
+        ["$banner$marker\n{\"Host\":{}}", '{"Host":{}}', 'JSON output is valid after the banner is removed'],
+        ["$banner$marker\nfirst\n$marker\nsecond", "first\n$marker\nsecond", 'Only the first marker is removed'],
+        ["$banner$marker", '', 'Command without output returns an empty string'],
+        ["Banner\r\n$marker\r\nvmhana01", 'vmhana01', 'CRLF line endings are supported'],
+        ["ssh: connect to host 1.2.3.4 port 22: Connection refused", "ssh: connect to host 1.2.3.4 port 22: Connection refused", 'Output without marker is not changed'],
+    );
+    for my $case (@cases) {
+        $ssh_output = $case->[0];
+        is ssh_output_no_banner($mock_instance, cmd => 'dummy'), $case->[1], $case->[2];
+    }
+
+    $ssh_output = undef;
+    is ssh_output_no_banner($mock_instance, cmd => 'dummy'), undef, 'undef output stays undef';
+};
+
+subtest "[run_cmd] banner is removed" => sub {
+    my $self = sles4sap::publiccloud->new();
+
+    my $mock_pc = Test::MockObject->new();
+    $mock_pc->set_true('wait_for_ssh');
+    $mock_pc->set_true('update_instance_ip');
+    my @calls;
+    # Simulate ssh on a serial terminal: banner first, then the remote command output
+    $mock_pc->mock('ssh_script_output', sub {
+            my ($self, %args) = @_;
+            push @calls, $args{cmd};
+            return $banner . "$marker\nactive" });
+    $self->{my_instance} = $mock_pc;
+    $self->{my_instance}->{instance_id} = 'Yondu';
+    my @infos;
+    my $sles4sap_publiccloud = Test::MockModule->new('sles4sap::publiccloud', no_auto => 1);
+    $sles4sap_publiccloud->redefine(record_info => sub { push @infos, join(' ', @_); note(join(' ', 'RECORD_INFO -->', @_)); });
+
+    is $self->run_cmd(cmd => 'systemctl is-active pacemaker'), 'active', 'run_cmd returns the output without banner';
+    is $calls[0], "echo $marker; sudo systemctl is-active pacemaker", 'Marker is outside of sudo';
+    ok((none { /Authorized users only/ } @infos), 'Banner is not in record_info');
+
+    @calls = ();
+    $self->run_cmd(cmd => 'HDB info', runas => 'ndbadm');
+    is $calls[0], "echo $marker; sudo su - ndbadm -c 'HDB info'", 'Marker is outside of su with runas';
+};
+
 subtest "[run_cmd_retry] with ssh_keepalive" => sub {
     my $self = sles4sap::publiccloud->new();
     my $sles4sap_pc_mock = Test::MockModule->new('sles4sap::publiccloud', no_auto => 1);
