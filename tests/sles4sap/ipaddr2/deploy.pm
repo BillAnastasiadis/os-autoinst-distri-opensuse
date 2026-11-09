@@ -45,6 +45,16 @@ Enable trusted launch for the VMs.
 
 Specifies the public cloud provider for deployment. Currently, only AZURE is supported.
 
+=item B<IPADDR2_AIDE_DISABLE>
+
+If true (default on SLE >= 16), disable aidecheck.timer and aidecheck.service
+on all three VMs. With cloud-init enabled this happens in bootcmd of every boot,
+including the bastion, which gets a minimal profile only for this purpose;
+configure.pm repeats it over ssh as a safety net and as the only option when
+B<IPADDR2_CLOUDINIT> is 0. Hardened SLE 16 images run the check at every boot:
+it starves small VMs and leaves the system 'degraded' after patching.
+Set to 0 to test the image as shipped.
+
 =item B<PUBLIC_CLOUD_IMAGE_LOCATION> and B<PUBLIC_CLOUD_IMAGE_ID>
 
 Id of the OS images to use for the VMs deployment.
@@ -74,8 +84,10 @@ QE-SAP <qe-sap@suse.de>
 use Mojo::Base 'publiccloud::basetest';
 use testapi;
 use serial_terminal qw( select_serial_terminal );
+use version_utils qw( is_sle );
 use sles4sap::ipaddr2 qw(
   ipaddr2_cloudinit_create
+  ipaddr2_cloudinit_bastion_create
   ipaddr2_infra_deploy
   ipaddr2_deployment_sanity
   ipaddr2_post_fail_hook
@@ -120,6 +132,11 @@ sub run {
       if (get_var('SCC_ADDONS') && !check_var('IPADDR2_CLOUDINIT', 0));
 
     $cloudinit_args{external_repo} = get_var('IPADDR2_NGINX_EXTREPO') if get_var('IPADDR2_NGINX_EXTREPO');
+
+    # Hardened SLE 16 images run aidecheck at every boot; see IPADDR2_AIDE_DISABLE
+    my $aide_disable = get_var('IPADDR2_AIDE_DISABLE', is_sle('>=16') ? 1 : 0);
+    $cloudinit_args{aide_disable} = 1 if $aide_disable;
+
     my %deployment = (
         os => $os,
         diagnostic => get_var('IPADDR2_DIAGNOSTIC', 0));
@@ -128,7 +145,11 @@ sub run {
     # If required (by default cloud-init is active), both:
     #   - create on the fly the cloud-init profile
     #   - activate the cloud-init part in the deployment
-    $deployment{cloudinit_profile} = ipaddr2_cloudinit_create(%cloudinit_args) unless (check_var('IPADDR2_CLOUDINIT', 0));
+    unless (check_var('IPADDR2_CLOUDINIT', 0)) {
+        $deployment{cloudinit_profile} = ipaddr2_cloudinit_create(%cloudinit_args);
+        # the bastion gets a minimal profile only to disable aide at every boot
+        $deployment{bastion_cloudinit_profile} = ipaddr2_cloudinit_bastion_create() if $aide_disable;
+    }
 
     ipaddr2_infra_deploy(%deployment);
 

@@ -53,6 +53,8 @@ our @EXPORT = qw(
   ipaddr2_bastion_sshd_override
   ipaddr2_internal_key_accept
   ipaddr2_internal_key_gen
+  ipaddr2_aide_disable
+  ipaddr2_cloudinit_bastion_create
   ipaddr2_scc_check
   ipaddr2_scc_register
   ipaddr2_scc_registration_workaround_PAYG
@@ -92,6 +94,8 @@ use constant BASTION_SSH_TIMEOUT => 30;
 use constant SCP_TIMEOUT => 30;
 # Time limit, in seconds, for each upload_logs in ipaddr2_logs_collect.
 use constant UPLOAD_TIMEOUT => 90;
+# Hardened SLE 16 images run aidecheck.service at every boot.
+use constant AIDE_DISABLE_CMD => 'systemctl disable --now aidecheck.timer aidecheck.service || true';
 
 our $bastion_vm_name = DEPLOY_PREFIX . "-vm-bastion";
 our $bastion_pub_ip = DEPLOY_PREFIX . '-pub_ip';
@@ -154,6 +158,11 @@ Create the cloud-init.txt profile file
 
 =item B<external_repo> - Optional argument: allow to add a PackageHub product
 
+=item B<aide_disable> - Optional argument. If true, stop and disable aidecheck.timer and
+                        aidecheck.service in bootcmd (runs at every boot, so it also covers the
+                        reboot in patch_system) and once more in runcmd, in case the unit was
+                        already queued when bootcmd ran.
+
 =back
 =cut
 
@@ -189,17 +198,43 @@ END
     $cloud_init_content .= <<END;
   - 'echo "I am \$(hostname)" > $args{nginx_root}/index.html'
 END
-    # 3. Optionally add registration
-    if ($args{scc_code}) {
-        $cloud_init_content .= <<END;
-bootcmd:
-  - registercloudguest --clean
-  - registercloudguest --force-new -r $args{scc_code}
-END
-    }
+    # 5. Optionally disable aide again at the end of the first boot
+    $cloud_init_content .= "  - '" . AIDE_DISABLE_CMD . "'\n" if $args{aide_disable};
+
+    # 6. bootcmd: runs at every boot, before most services.
+    #    The key can appear only once in the file, so compose the list first.
+    my @bootcmd;
+    push @bootcmd, "  - '" . AIDE_DISABLE_CMD . "'" if $args{aide_disable};
+    # Optionally add registration
+    push @bootcmd, '  - registercloudguest --clean', "  - registercloudguest --force-new -r $args{scc_code}" if $args{scc_code};
+    $cloud_init_content .= join("\n", 'bootcmd:', @bootcmd) . "\n" if @bootcmd;
+
     my $cloud_init_file = '/tmp/cloud-init-web.txt';
     write_sut_file($cloud_init_file, $cloud_init_content);
     # upload to allow debugging
+    upload_logs($cloud_init_file);
+    return $cloud_init_file;
+}
+
+=head2 ipaddr2_cloudinit_bastion_create
+
+    my $cloud_init_file = ipaddr2_cloudinit_bastion_create();
+
+Create a minimal cloud-init profile for the bastion. The bastion needs no
+packages or registration; the profile only disables the aide check at every
+boot, as early as the guest allows.
+Return the path of the profile file.
+=cut
+
+sub ipaddr2_cloudinit_bastion_create {
+    my $cloud_init_content = join("\n",
+        '#cloud-config',
+        'bootcmd:',
+        "  - '" . AIDE_DISABLE_CMD . "'",
+        'runcmd:',
+        "  - '" . AIDE_DISABLE_CMD . "'") . "\n";
+    my $cloud_init_file = '/tmp/cloud-init-bastion.txt';
+    write_sut_file($cloud_init_file, $cloud_init_content);
     upload_logs($cloud_init_file);
     return $cloud_init_file;
 }
@@ -229,6 +264,10 @@ Create a deployment in Azure designed for this specific test.
                       B<ipaddr2_cloudinit_create>.
                       Presence of this optional argument also enable cloud-init features in various deployment stages.
 
+=item B<bastion_cloudinit_profile> - Optional cloud-init profile for the bastion, usually the return
+                      value of B<ipaddr2_cloudinit_bastion_create>. When present, deploy also waits
+                      for cloud-init to complete on the bastion.
+                      
 =back
 =cut
 
@@ -412,7 +451,12 @@ sub ipaddr2_infra_deploy(%args) {
     my %vm_create_bastion_args = %vm_create_generic_args;
     $vm_create_bastion_args{name} = $bastion_vm_name;
     $vm_create_bastion_args{public_ip} = $bastion_pub_ip;
+    $vm_create_bastion_args{custom_data} = $args{bastion_cloudinit_profile} if ($args{bastion_cloudinit_profile});
     az_vm_create(%vm_create_bastion_args);
+    az_vm_wait_cloudinit(
+        resource_group => $rg,
+        name => $bastion_vm_name,
+        username => USER) if ($args{bastion_cloudinit_profile});
 
     # Keep this loop separated from the other to hopefully
     # give cloud-init more time to run and avoid interfering
@@ -806,6 +850,42 @@ sub ipaddr2_internal_key_gen(%args) {
     $auth_args{src} = 2;
     $auth_args{dst} = 1;
     ipaddr2_internal_key_authorize(%auth_args);
+}
+
+=head2 ipaddr2_aide_disable
+
+    ipaddr2_aide_disable(bastion_ip => '1.2.3.4');
+
+Stop and disable aidecheck.timer and aidecheck.service on the bastion and on
+both internal VMs, and clear a failed state of the service. This is the
+fallback for deployments without cloud-init (IPADDR2_CLOUDINIT=0), where the
+first-boot run cannot be prevented, and a safety net otherwise. Failures are
+ignored: the units may not exist on other images.
+
+=over
+
+=item B<bastion_ip> - Public IP address of the bastion. Calculated if not provided.
+
+=back
+=cut
+
+sub ipaddr2_aide_disable(%args) {
+    $args{bastion_ip} //= ipaddr2_bastion_pubip();
+    die "Problem getting bastion public IP" unless $args{bastion_ip};
+
+    my $cmd = 'sudo ' . AIDE_DISABLE_CMD . '; sudo systemctl reset-failed aidecheck.service || true';
+
+    my $ret = ipaddr2_ssh_bastion_script_run(bastion_ip => $args{bastion_ip}, cmd => $cmd, timeout => 60);
+    record_info('aide', "aidecheck disabled on the bastion, rc $ret");
+
+    foreach my $id (1 .. 2) {
+        $ret = ipaddr2_ssh_internal(id => $id,
+            cmd => $cmd,
+            timeout => 60,
+            no_assert => 1,
+            bastion_ip => $args{bastion_ip});
+        record_info('aide', "aidecheck disabled on VM $id, rc " . ($ret // 'undef'));
+    }
 }
 
 =head2 ipaddr2_internal_key_authorize

@@ -1541,6 +1541,70 @@ subtest '[ipaddr2_cloudinit_create] nginx_root' => sub {
     like($cloud_init_content, qr/echo.*>.*ABCD.*index/, "cloud-init deploy the index.html in a custom folder");
 };
 
+subtest '[ipaddr2_cloudinit_create] aide_disable' => sub {
+    my $ipaddr2 = Test::MockModule->new('sles4sap::ipaddr2', no_auto => 1);
+    my $cloud_init_content;
+    $ipaddr2->redefine(write_sut_file => sub { $cloud_init_content = $_[1]; return; });
+    $ipaddr2->noop('upload_logs');
+
+    ipaddr2_cloudinit_create(aide_disable => 1, scc_code => 'ABCD');
+
+    note("cloud_init_content:\n$cloud_init_content");
+    like($cloud_init_content, qr/bootcmd:\n  - 'systemctl disable --now aidecheck\.timer aidecheck\.service/, 'aide disabled in bootcmd');
+    like($cloud_init_content, qr/registercloudguest.*ABCD/, 'registration still in bootcmd');
+    is(scalar(() = $cloud_init_content =~ /^bootcmd:/mg), 1, 'bootcmd key appears once');
+    is(scalar(() = $cloud_init_content =~ /aidecheck\.service/g), 2, 'aide disabled in bootcmd and runcmd');
+};
+
+subtest '[ipaddr2_cloudinit_bastion_create]' => sub {
+    my $ipaddr2 = Test::MockModule->new('sles4sap::ipaddr2', no_auto => 1);
+    my $cloud_init_content;
+    $ipaddr2->redefine(write_sut_file => sub { $cloud_init_content = $_[1]; return; });
+    $ipaddr2->noop('upload_logs');
+
+    my $file = ipaddr2_cloudinit_bastion_create();
+
+    like($file, qr/bastion/, 'bastion profile has its own file');
+    like($cloud_init_content, qr/^#cloud-config/, 'valid cloud-config header');
+    like($cloud_init_content, qr/aidecheck/, 'bastion profile disables aide');
+    unlike($cloud_init_content, qr/nginx|registercloudguest/, 'bastion profile has nothing else');
+};
+
+subtest '[ipaddr2_infra_deploy] bastion_cloudinit_profile' => sub {
+    my $ipaddr2 = Test::MockModule->new('sles4sap::ipaddr2', no_auto => 1);
+    $ipaddr2->redefine(get_current_job_id => sub { return 'Volta'; });
+    $ipaddr2->redefine(qesap_get_public_cloud_tags => sub { return (); });
+    my @calls;
+    $ipaddr2->redefine(assert_script_run => sub { push @calls, $_[0]; return; });
+    $ipaddr2->redefine(az_vm_wait_running => sub { return 300; });
+    $ipaddr2->redefine(record_info => sub { note(join(' ', 'RECORD_INFO -->', @_)); });
+    my $azcli = Test::MockModule->new('sles4sap::azure_cli', no_auto => 1);
+    $azcli->redefine(assert_script_run => sub { push @calls, $_[0]; return; });
+    $azcli->redefine(script_output => sub { push @calls, $_[0]; return 'Fermi'; });
+    $azcli->redefine(az => sub { my %args = @_; push @calls, $args{az_args}; return {rc => 0, stdout => '{"id": "fake_id"}'}; });
+
+    ipaddr2_infra_deploy(region => 'Marconi', os => 'Meucci', bastion_cloudinit_profile => '/tmp/Faggin');
+
+    ok((any { /vm create.*bastion.*custom-data \/tmp\/Faggin/ } @calls), 'bastion created with its cloud-init profile');
+    ok((none { /vm create.*vm-0[12].*custom-data/ } @calls), 'internal VMs do not get the bastion profile');
+    ok((any { /cloud-init status/ } @calls), 'deploy waits for cloud-init on the bastion');
+};
+
+subtest '[ipaddr2_aide_disable]' => sub {
+    my $ipaddr2 = Test::MockModule->new('sles4sap::ipaddr2', no_auto => 1);
+    $ipaddr2->redefine(record_info => sub { note(join(' ', 'RECORD_INFO -->', @_)); });
+    my @calls;
+    $ipaddr2->redefine(ipaddr2_ssh_bastion_script_run => sub { my (%args) = @_; push @calls, ['bastion', $args{cmd}]; return 0; });
+    $ipaddr2->redefine(ipaddr2_ssh_internal => sub { my (%args) = @_; push @calls, ["VM$args{id}", $args{cmd}]; return 0; });
+
+    ipaddr2_aide_disable(bastion_ip => '1.2.3.4');
+
+    is(scalar @calls, 3, 'one command on the bastion and one per internal VM');
+    ok((all { $_->[1] =~ /sudo systemctl disable --now aidecheck\.timer aidecheck\.service/ } @calls), 'aide stopped and disabled everywhere');
+    ok((all { $_->[1] =~ /reset-failed aidecheck\.service/ } @calls), 'failed state cleared everywhere');
+    is_deeply([map { $_->[0] } @calls], ['bastion', 'VM1', 'VM2'], 'bastion first, then both VMs');
+};
+
 subtest '[ipaddr2_os_connectivity_sanity]' => sub {
     my $ipaddr2 = Test::MockModule->new('sles4sap::ipaddr2', no_auto => 1);
     $ipaddr2->redefine(ipaddr2_bastion_pubip => sub { return '1.2.3.4'; });

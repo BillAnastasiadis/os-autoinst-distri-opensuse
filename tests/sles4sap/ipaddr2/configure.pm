@@ -43,6 +43,11 @@ generated for the 'root' user. Otherwise, the default user (for example, 'clouda
 A compatibility flag for older SSH clients. If set to 1, it uses a less strict
 host key checking mechanism ('no') suitable for older systems where 'accept-new' is not supported.
 
+=item B<IPADDR2_AIDE_DISABLE>
+
+If true (default on SLE >= 16), stop and disable aidecheck on the bastion and both
+internal VMs once ssh works, and clear a failed state. See the same setting in deploy.pm.
+
 =back
 
 =head1 MAINTAINER
@@ -61,6 +66,7 @@ use sles4sap::ipaddr2 qw(
   ipaddr2_internal_key_accept
   ipaddr2_bastion_sshd_override
   ipaddr2_internal_key_gen
+  ipaddr2_aide_disable
   ipaddr2_post_fail_hook
 );
 
@@ -89,6 +95,11 @@ sub run {
     $int_key_args{key_checking} = 'no' if (check_var('IPADDR2_KEYCHECK_OLD', '1'));
     $ret = ipaddr2_internal_key_accept(%int_key_args);
     die "Internal key accept failed with exit code $ret" if $ret;
+
+    if (get_var('IPADDR2_AIDE_DISABLE', is_sle('>=16') ? 1 : 0)) {
+        record_info('aide', 'aidecheck disabled on all VMs: the system under test differs from the image as shipped');
+        ipaddr2_aide_disable(bastion_ip => $bastion_ip);
+    }
 
     # default for ipaddr2_internal_key_gen is cloudadmin
     $int_key_args{user} = 'root' unless check_var('IPADDR2_ROOTLESS', '1');
