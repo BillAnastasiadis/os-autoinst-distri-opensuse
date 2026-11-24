@@ -1883,6 +1883,8 @@ sub incident_pkg_pages {
         'http://ocean/ibs/TANK/repodata/repomd.xml' => 'href="repodata/ghi-primary.xml.gz"',
         'http://ocean/ibs/TANK/repodata/ghi-primary.xml.gz' => 'this is not a package list',
     );
+    my $amis = '{"images":[{"id":"ami-0c0ffee","changeinfo":"https://publiccloudimagechangeinfo.suse.com/amazon/SYDNEY/"},'
+      . '{"id":"ami-0decaf","changeinfo":""}]}';
     my %worker = (
         'https://publiccloudimagechangeinfo.suse.com/amazon/SYDNEY/cdx.json' => $sbom,
         'https://publiccloudimagechangeinfo.suse.com/amazon/DARLA/cdx.json' => 'this is not json',
@@ -1891,6 +1893,7 @@ sub incident_pkg_pages {
         'https://susepubliccloudinfo.suse.com/v1/microsoft/images/active.json' => '{"images":[' . join(',',
             $pint->('2026.09.15', 'BLOAT'), $pint->('2026.10.30', 'SYDNEY'), '{"urn":"suse:nemo:gen1:2026.11.30","changeinfo":"PEACH"}') . ']}',
         'https://susepubliccloudinfo.suse.com/v1/microsoft/images.json' => '{"images":[' . $pint->('2026.09.15', 'BLOAT') . ']}',
+        'https://susepubliccloudinfo.suse.com/v1/amazon/images.json' => $amis,
     );
     return (\%jumphost, \%worker);
 }
@@ -1973,6 +1976,20 @@ subtest '[qesap_incident_packages_in_image] Azure URN' => sub {
     is_deeply([keys %$ret], ['marlin-tools'], 'A fixed version selects the image with this version');
     ok((any { /microsoft\/images\.json$/ } @calls), 'A fixed version is searched in the images of all states');
     ok(!qesap_incident_packages_in_image(image => 'suse:nigel:gen2:latest'), 'Return a false value with an unknown URN');
+
+    set_var($_, undef) foreach (qw(PUBLIC_CLOUD_PROVIDER INCIDENT_REPO));
+};
+
+subtest '[qesap_incident_packages_in_image] AMI ID' => sub {
+    my (@calls, @info);
+    my $qesap = incident_pkg_mock(\@calls, \@info);
+    set_var('PUBLIC_CLOUD_PROVIDER', 'EC2');
+    set_var('INCIDENT_REPO', 'http://ocean/ibs/REEF');
+
+    my $ret = qesap_incident_packages_in_image(image => 'ami-0c0ffee');
+    is_deeply([keys %$ret], ['nemo-settings'], 'The AMI ID selects the image with this ID in pint');
+    ok(!qesap_incident_packages_in_image(image => 'ami-0decaf'), 'Return a false value when the AMI has no package data');
+    ok(!qesap_incident_packages_in_image(image => 'ami-0bad'), 'Return a false value with an unknown AMI ID');
 
     set_var($_, undef) foreach (qw(PUBLIC_CLOUD_PROVIDER INCIDENT_REPO));
 };

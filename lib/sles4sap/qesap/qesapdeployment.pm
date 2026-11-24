@@ -58,9 +58,9 @@ use constant QESAPDEPLOY_PREFIX => 'qesapdep';
 use constant QESAPDEPLOY_VENV => '/tmp/exec_venv';
 use constant QESAPDEPLOY_PY_DEFAULT_VER => '3.11';
 use constant QESAP_CACHE_ROOT => '/root/qesap_cache';
-# Package data of each SUSE public cloud image, and pint API to find the Azure images
+# Package data of each SUSE public cloud image, and pint API to find the image from an Azure URN or an AMI ID
 use constant QESAP_IMAGE_INFO_URL => 'https://publiccloudimagechangeinfo.suse.com';
-use constant QESAP_PINT_AZURE_URL => 'https://susepubliccloudinfo.suse.com/v1/microsoft';
+use constant QESAP_PINT_URL => 'https://susepubliccloudinfo.suse.com/v1';
 
 our @EXPORT = qw(
   qesap_cache_releases
@@ -2509,7 +2509,7 @@ sub _qesap_repo_packages {
     the key is the name, the value is an array of versions. Dies if the data is not available.
     The SBOM also has components that are not RPM packages (for example Go modules): they are ignored.
     The first argument is the framework name of pint: amazon, google or microsoft.
-    For an Azure URN the function asks pint for the folder of the image.
+    For an Azure URN or an AMI ID the function asks pint for the folder of the image.
     The URN version 'latest' selects the newest active image.
 
 =cut
@@ -2520,13 +2520,19 @@ sub _qesap_image_packages {
     my @urn = split(/:/, lc($image));
     if ($framework eq 'microsoft' && @urn == 4) {
         my $latest = ($urn[3] eq 'latest');
-        my $pint = decode_json(_qesap_http_get(QESAP_PINT_AZURE_URL . ($latest ? '/images/active.json' : '/images.json')));
+        my $pint = decode_json(_qesap_http_get(QESAP_PINT_URL . '/microsoft' . ($latest ? '/images/active.json' : '/images.json')));
         my %folder = map { lc($_->{urn}) => $_->{changeinfo} } grep { $_->{urn} && $_->{changeinfo} } @{$pint->{images}};
         my $prefix = join(':', @urn[0 .. 2], '');
         # The version has the format YYYY.MM.DD: the last one in string order is the newest
         my @found = sort grep { $latest ? index($_, $prefix) == 0 : $_ eq $prefix . $urn[3] } keys %folder;
         die "No image with the URN $image in pint\n" unless @found;
         $url = $folder{$found[-1]} =~ s{/+$}{}r;
+    }
+    elsif ($framework eq 'amazon' && $image =~ /^ami-/) {
+        my $pint = decode_json(_qesap_http_get(QESAP_PINT_URL . '/amazon/images.json'));
+        my ($found) = grep { ($_->{id} // '') eq $image && $_->{changeinfo} } @{$pint->{images}};
+        die "No image with the ID $image in pint\n" unless $found;
+        $url = $found->{changeinfo} =~ s{/+$}{}r;
     }
     my %packages;
     foreach my $component (@{decode_json(_qesap_http_get("$url/cdx.json"))->{components}}) {
@@ -2558,7 +2564,7 @@ sub _qesap_image_packages {
 =over
 
 =item B<image> - folder name of the image on https://publiccloudimagechangeinfo.suse.com
-(for example 'suse-sles-sap-16-0-byos-v20261030-hvm-ssd-x86_64') or Azure URN
+(for example 'suse-sles-sap-16-0-byos-v20261030-hvm-ssd-x86_64'), Azure URN or AMI ID
 
 =item B<provider> - EC2, AZURE, GCE or GCP. Optional, default is the setting PUBLIC_CLOUD_PROVIDER
 
