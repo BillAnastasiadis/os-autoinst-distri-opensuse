@@ -1862,4 +1862,151 @@ subtest '[qesap_prepare_env] no version set does git clone without release downl
     ok(!(any { /curl.*github.com\/SUSE\/qe-sap-deployment\/archive/ } @calls), 'No release tarball download');
 };
 
+# Data for qesap_incident_packages_in_image. The first hash has the output of the jumphost commands
+# for the repositories: REEF has gzip metadata, WRECK has zstd metadata. The key is the address of the file.
+# The second hash has the pages for the downloads from the worker: the pint data and the SBOM of two images.
+sub incident_pkg_pages {
+    my $pint = sub { return qq({"urn":"suse:nemo:gen2:$_[0]","changeinfo":"https://publiccloudimagechangeinfo.suse.com/microsoft/$_[1]/"}); };
+    my $package = sub { return join("\n", "<name>$_[0]", "<arch>$_[1]", qq{<version epoch="0" ver="$_[2]" rel="$_[3]"/}); };
+    # marlin-tools is in the SBOM only as a Go module: it is not an RPM package of the image
+    my $sbom = '{"components":[{"name":"nemo-settings","version":"0.10-150300.3.7.1","purl":"pkg:rpm/suse/nemo-settings@0.10-150300.3.7.1?arch=noarch"},'
+      . '{"name":"python313-bruce","version":"0.13.1-160000.1.2"},{"name":"marlin-tools","version":"v1.0","purl":"pkg:golang/marlin-tools@1.0"},'
+      . '{"name":"gill-source","version":"1-1"}]}';
+    my %jumphost = (
+        'http://ocean/ibs/REEF/repodata/repomd.xml' => 'href="repodata/abc-primary.xml.gz"',
+        'http://ocean/ibs/REEF/repodata/abc-primary.xml.gz' => join("\n",
+            $package->('nemo-settings', 'noarch', '0.11', '150300.3.10.1'),
+            $package->('gill-source', 'src', '0.11', '150300.3.10.1'),
+            $package->('marlin-tools', 'x86_64', '2.0', '150600.1.1')),
+        'http://ocean/ibs/WRECK/repodata/repomd.xml' => 'href="repodata/def-primary.xml.zst"',
+        'http://ocean/ibs/WRECK/repodata/def-primary.xml.zst' => $package->('python313-bruce', 'noarch', '0.13.2', '160000.1.1'),
+        'http://ocean/ibs/TANK/repodata/repomd.xml' => 'href="repodata/ghi-primary.xml.gz"',
+        'http://ocean/ibs/TANK/repodata/ghi-primary.xml.gz' => 'this is not a package list',
+    );
+    my %worker = (
+        'https://publiccloudimagechangeinfo.suse.com/amazon/SYDNEY/cdx.json' => $sbom,
+        'https://publiccloudimagechangeinfo.suse.com/amazon/DARLA/cdx.json' => 'this is not json',
+        'https://publiccloudimagechangeinfo.suse.com/microsoft/SYDNEY/cdx.json' => $sbom,
+        'https://publiccloudimagechangeinfo.suse.com/microsoft/BLOAT/cdx.json' => '{"components":[{"name":"marlin-tools","version":"1.0-150600.1.1"}]}',
+        'https://susepubliccloudinfo.suse.com/v1/microsoft/images/active.json' => '{"images":[' . join(',',
+            $pint->('2026.09.15', 'BLOAT'), $pint->('2026.10.30', 'SYDNEY'), '{"urn":"suse:nemo:gen1:2026.11.30","changeinfo":"PEACH"}') . ']}',
+        'https://susepubliccloudinfo.suse.com/v1/microsoft/images.json' => '{"images":[' . $pint->('2026.09.15', 'BLOAT') . ']}',
+    );
+    return (\%jumphost, \%worker);
+}
+
+# Mock the jumphost commands, the downloads and record_info. Return the mock object, the caller keeps it alive.
+# The 'zstd_missing' argument is the exit code of 'rpm -q zstd'.
+sub incident_pkg_mock {
+    my ($calls, $info, %args) = @_;
+    my $qesap = Test::MockModule->new('sles4sap::qesap::qesapdeployment', no_auto => 1);
+    my ($jumphost, $worker) = incident_pkg_pages();
+    $qesap->redefine(script_output => sub {
+            push @$calls, $_[0];
+            my ($url) = $_[0] =~ /curl -sSfL '([^']+)'/;
+            return $jumphost->{$url} // die "command failed\n"; });
+    $qesap->redefine(script_run => sub { push @$calls, $_[0]; return $args{zstd_missing} // 0; });
+    $qesap->redefine(zypper_call => sub { push @$calls, "zypper $_[0]"; return 0; });
+    $qesap->redefine(_qesap_http_get => sub { push @$calls, $_[0]; return $worker->{$_[0]} // die "404 Not Found\n"; });
+    $qesap->redefine(record_info => sub { push @$info, join(' ', @_); note(join(' ', 'RECORD_INFO -->', @_)); });
+    return $qesap;
+}
+
+subtest '[qesap_incident_packages_in_image] packages from gzip and zstd metadata' => sub {
+    my (@calls, @info);
+    my $qesap = incident_pkg_mock(\@calls, \@info);
+    set_var('PUBLIC_CLOUD_PROVIDER', 'EC2');
+    set_var('INCIDENT_REPO', 'http://ocean/ibs/REEF/, http://ocean/ibs/WRECK');
+
+    my $ret = qesap_incident_packages_in_image(image => 'SYDNEY');
+
+    set_var($_, undef) foreach (qw(PUBLIC_CLOUD_PROVIDER INCIDENT_REPO));
+    note("\n  -->  " . join("\n  -->  ", @calls));
+    # gill-source is a source package: it is not an update package.
+    # marlin-tools is an update package, but the image has only a Go module with this name.
+    is_deeply($ret, {
+            'nemo-settings' => {image_version => '0.10-150300.3.7.1', update_version => '0.11-150300.3.10.1'},
+            'python313-bruce' => {image_version => '0.13.1-160000.1.2', update_version => '0.13.2-160000.1.1'}},
+        'Only the binary RPM packages with the exact name are returned, with the two versions');
+    ok((any { /Incident packages: marlin-tools nemo-settings python313-bruce$/m } @info), 'All the binary packages of the repositories are recorded');
+    ok((any { /abc-primary\.xml\.gz' \| gzip -dc \|/ } @calls), 'gzip decompresses the .gz metadata');
+    ok((any { /def-primary\.xml\.zst' \| zstd -dc \|/ } @calls), 'zstd decompresses the .zst metadata');
+    ok((none { /^zypper/ } @calls), 'No package installation when zstd is available');
+};
+
+subtest '[qesap_incident_packages_in_image] zstd is installed only when necessary' => sub {
+    my (@calls, @info);
+    my $qesap = incident_pkg_mock(\@calls, \@info, zstd_missing => 1);
+    set_var('PUBLIC_CLOUD_PROVIDER', 'EC2');
+
+    qesap_incident_packages_in_image(image => 'SYDNEY', repos => 'http://ocean/ibs/REEF');
+    ok((none { /zstd/ } @calls), 'No check and no installation of zstd for gzip metadata');
+
+    my $ret = qesap_incident_packages_in_image(image => 'SYDNEY', repos => 'http://ocean/ibs/WRECK');
+    set_var('PUBLIC_CLOUD_PROVIDER', undef);
+    ok((any { /^zypper in zstd$/ } @calls), 'zstd is installed when it is missing and the metadata is .zst');
+    is_deeply([keys %$ret], ['python313-bruce'], 'The packages are read after the installation');
+};
+
+subtest '[qesap_incident_packages_in_image] arguments take priority over the settings' => sub {
+    my (@calls, @info);
+    my $qesap = incident_pkg_mock(\@calls, \@info);
+    set_var('PUBLIC_CLOUD_PROVIDER', 'OPENSTACK');
+    set_var('INCIDENT_REPO', 'http://ocean/ibs/DROPOFF');
+
+    my $ret = qesap_incident_packages_in_image(image => 'SYDNEY', provider => 'EC2', repos => 'http://ocean/ibs/WRECK');
+
+    set_var($_, undef) foreach (qw(PUBLIC_CLOUD_PROVIDER INCIDENT_REPO));
+    is_deeply([keys %$ret], ['python313-bruce'], 'The provider and repos arguments are used');
+    ok((none { /DROPOFF/ } @calls), 'The repository of the INCIDENT_REPO setting is not downloaded');
+};
+
+subtest '[qesap_incident_packages_in_image] Azure URN' => sub {
+    my (@calls, @info);
+    my $qesap = incident_pkg_mock(\@calls, \@info);
+    set_var('PUBLIC_CLOUD_PROVIDER', 'AZURE');
+    set_var('INCIDENT_REPO', 'http://ocean/ibs/REEF');
+
+    my $ret = qesap_incident_packages_in_image(image => 'SUSE:nemo:gen2:latest');
+    is_deeply([keys %$ret], ['nemo-settings'], "'latest' selects the newest active image with the same offer and sku");
+    $ret = qesap_incident_packages_in_image(image => 'suse:nemo:gen2:2026.09.15');
+    is_deeply([keys %$ret], ['marlin-tools'], 'A fixed version selects the image with this version');
+    ok((any { /microsoft\/images\.json$/ } @calls), 'A fixed version is searched in the images of all states');
+    ok(!qesap_incident_packages_in_image(image => 'suse:nigel:gen2:latest'), 'Return a false value with an unknown URN');
+
+    set_var($_, undef) foreach (qw(PUBLIC_CLOUD_PROVIDER INCIDENT_REPO));
+};
+
+subtest '[qesap_incident_packages_in_image] problems are recorded and do not die' => sub {
+    my (@calls, @info);
+    my $qesap = incident_pkg_mock(\@calls, \@info);
+    my $ret;
+    set_var('PUBLIC_CLOUD_PROVIDER', 'EC2');
+    # DROPOFF has no page and TANK has broken metadata: only REEF is good
+    set_var('INCIDENT_REPO', 'http://ocean/ibs/DROPOFF,http://ocean/ibs/TANK,http://ocean/ibs/REEF');
+
+    lives_ok { $ret = qesap_incident_packages_in_image(image => 'SYDNEY') } 'Does not die when some repositories are broken';
+    is_deeply([keys %$ret], ['nemo-settings'], 'The good repository is still used');
+    is(scalar(grep { /Cannot read the packages of http:\/\/ocean\/ibs\/(DROPOFF|TANK)/ } @info), 2, 'The two broken repositories are recorded');
+
+    lives_ok { $ret = qesap_incident_packages_in_image(image => 'DARLA') } 'Does not die when the image data is broken';
+    ok(!$ret, 'Return a false value when the image data is broken');
+    ok((any { /No package check for the image DARLA/ } @info), 'The broken image data is recorded');
+
+    set_var('INCIDENT_REPO', 'http://ocean/ibs/WRECK');
+    ok(!qesap_incident_packages_in_image(image => 'BLOAT'), 'Return a false value when the image has no SBOM');
+
+    set_var('PUBLIC_CLOUD_PROVIDER', 'OPENSTACK');
+    lives_ok { $ret = qesap_incident_packages_in_image(image => 'SYDNEY') } 'Does not die with an unknown provider';
+    ok(!$ret, 'Return a false value with an unknown provider');
+
+    set_var('PUBLIC_CLOUD_PROVIDER', 'EC2');
+    set_var('INCIDENT_REPO', undef);
+    lives_ok { $ret = qesap_incident_packages_in_image(image => 'SYDNEY') } 'Does not die without INCIDENT_REPO';
+    ok(!$ret, 'Return a false value without INCIDENT_REPO');
+
+    set_var('PUBLIC_CLOUD_PROVIDER', undef);
+    dies_ok { qesap_incident_packages_in_image() } 'Die only for the missing image argument';
+};
+
 done_testing;

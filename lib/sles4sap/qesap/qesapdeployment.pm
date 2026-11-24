@@ -36,7 +36,8 @@ use NetAddr::IP;
 use Exporter 'import';
 use Scalar::Util qw(looks_like_number);
 use File::Basename;
-use utils qw(file_content_replace script_retry);
+use Mojo::UserAgent;
+use utils qw(file_content_replace script_retry zypper_call);
 use version_utils qw(is_sle);
 use publiccloud::utils qw(get_credentials detect_worker_ip);
 use sles4sap::qesap::aws;
@@ -57,6 +58,9 @@ use constant QESAPDEPLOY_PREFIX => 'qesapdep';
 use constant QESAPDEPLOY_VENV => '/tmp/exec_venv';
 use constant QESAPDEPLOY_PY_DEFAULT_VER => '3.11';
 use constant QESAP_CACHE_ROOT => '/root/qesap_cache';
+# Package data of each SUSE public cloud image, and pint API to find the Azure images
+use constant QESAP_IMAGE_INFO_URL => 'https://publiccloudimagechangeinfo.suse.com';
+use constant QESAP_PINT_AZURE_URL => 'https://susepubliccloudinfo.suse.com/v1/microsoft';
 
 our @EXPORT = qw(
   qesap_cache_releases
@@ -93,6 +97,7 @@ our @EXPORT = qw(
   qesap_create_cidr_from_ip
   qesap_ssh_intrusion_detection
   qesap_gcp_delete_leftover_ncc_spokes
+  qesap_incident_packages_in_image
 );
 
 =head1 DESCRIPTION
@@ -2444,6 +2449,156 @@ sub qesap_gcp_delete_leftover_ncc_spokes {
         );
     }
     return 1;
+}
+
+=head3 _qesap_http_get
+
+    Download a file from the worker and return its content. It is for the public
+    services with the image data: the repositories are read from the jumphost.
+    Dies if the download fails.
+
+=cut
+
+sub _qesap_http_get {
+    my ($url) = @_;
+    my $res = Mojo::UserAgent->new(max_redirects => 3, request_timeout => 120)->get($url)->result;
+    die "Download of $url failed: " . $res->code . " " . ($res->message // "") . "\n" unless $res->is_success;
+    return $res->body;
+}
+
+=head3 _qesap_repo_packages
+
+    my %packages = _qesap_repo_packages('http://SERVER/REPO');
+
+    Return the binary packages of a zypper repository: the key is the name,
+    the value is 'VERSION-RELEASE'. Dies if the metadata is not available.
+    The commands run on the jumphost: curl downloads repodata/repomd.xml, then the
+    primary.xml file. gzip or zstd decompress it and grep keeps only the name,
+    arch and version of each package. The zstd package is installed if it is missing.
+
+=cut
+
+sub _qesap_repo_packages {
+    my ($repo) = @_;
+    $repo =~ s{/+$}{};
+    my $curl = 'set -o pipefail ; curl -sSfL';
+    my $repomd = script_output(qq{$curl '$repo/repodata/repomd.xml' | grep -oE 'href="[^"]*primary\\.xml[^"]*"'});
+    die "No primary metadata in repomd.xml\n" unless $repomd =~ /href="([^"]+)"/;
+    my $primary = $1;
+    my $unpack = $primary =~ /\.zst$/ ? 'zstd -dc' : $primary =~ /\.gz$/ ? 'gzip -dc' : 'cat';
+    zypper_call('in zstd') if ($unpack eq 'zstd -dc' && script_run('rpm -q zstd'));
+
+    my (%packages, $name, $arch);
+    my $lines = script_output(qq{$curl '$repo/$primary' | $unpack | grep -oE '<(name|arch)>[^<]+|<version [^>]+'}, timeout => 300);
+    foreach my $line (split(/\n/, $lines)) {
+        $name = $1 if ($line =~ /^<name>(.+)/);
+        $arch = $1 if ($line =~ /^<arch>(.+)/);
+        next unless ($line =~ /^<version / && defined $name && defined $arch);
+        $packages{$name} = join('-', map { $line =~ /\b$_="([^"]*)"/ ? $1 : '' } qw(ver rel)) unless $arch =~ /^(?:no)?src$/;
+        ($name, $arch) = (undef, undef);
+    }
+    die "No binary package in the metadata\n" unless %packages;
+    return %packages;
+}
+
+=head3 _qesap_image_packages
+
+    my $packages = _qesap_image_packages('amazon', 'suse-sles-sap-16-0-byos-v20261030-hvm-ssd-x86_64');
+
+    Return the RPM packages of a SUSE public cloud image from its CycloneDX SBOM:
+    the key is the name, the value is an array of versions. Dies if the data is not available.
+    The SBOM also has components that are not RPM packages (for example Go modules): they are ignored.
+    The first argument is the framework name of pint: amazon, google or microsoft.
+    For an Azure URN the function asks pint for the folder of the image.
+    The URN version 'latest' selects the newest active image.
+
+=cut
+
+sub _qesap_image_packages {
+    my ($framework, $image) = @_;
+    my $url = join('/', QESAP_IMAGE_INFO_URL, $framework, $image);
+    my @urn = split(/:/, lc($image));
+    if ($framework eq 'microsoft' && @urn == 4) {
+        my $latest = ($urn[3] eq 'latest');
+        my $pint = decode_json(_qesap_http_get(QESAP_PINT_AZURE_URL . ($latest ? '/images/active.json' : '/images.json')));
+        my %folder = map { lc($_->{urn}) => $_->{changeinfo} } grep { $_->{urn} && $_->{changeinfo} } @{$pint->{images}};
+        my $prefix = join(':', @urn[0 .. 2], '');
+        # The version has the format YYYY.MM.DD: the last one in string order is the newest
+        my @found = sort grep { $latest ? index($_, $prefix) == 0 : $_ eq $prefix . $urn[3] } keys %folder;
+        die "No image with the URN $image in pint\n" unless @found;
+        $url = $folder{$found[-1]} =~ s{/+$}{}r;
+    }
+    my %packages;
+    foreach my $component (@{decode_json(_qesap_http_get("$url/cdx.json"))->{components}}) {
+        next if ($component->{purl} && $component->{purl} !~ m{^pkg:rpm/});
+        push @{$packages{$component->{name}}}, $component->{version} // '';
+    }
+    die "No package in $url/cdx.json\n" unless %packages;
+    return \%packages;
+}
+
+=head3 qesap_incident_packages_in_image
+
+    my $found = qesap_incident_packages_in_image(image => 'suse:sles-sap-16-0-x86-64:gen2:latest');
+
+    Find the packages of the incident repositories that are also in the public cloud image.
+    The comparison uses the exact package name. No cloud instance is necessary:
+    the image data is downloaded from the worker and the repository metadata
+    from the jumphost, then the jumphost must be able to reach the host of the repositories.
+
+    Return a hash reference if one or more packages are in the image.
+    The key is the package name. Each value is a hash with:
+     - image_version: version in the image. Many versions are separated by comma.
+     - update_version: version in the incident repository.
+
+    Return 0 if no package is in the image or if the data is not available.
+    The function records each problem with record_info and does not die.
+    The only exception is a missing argument.
+
+=over
+
+=item B<image> - folder name of the image on https://publiccloudimagechangeinfo.suse.com
+(for example 'suse-sles-sap-16-0-byos-v20261030-hvm-ssd-x86_64') or Azure URN
+
+=item B<provider> - EC2, AZURE, GCE or GCP. Optional, default is the setting PUBLIC_CLOUD_PROVIDER
+
+=item B<repos> - list of repository addresses, separated by comma.
+Optional, default is the setting INCIDENT_REPO
+
+=back
+=cut
+
+sub qesap_incident_packages_in_image {
+    my (%args) = @_;
+    croak 'Missing mandatory image argument' unless $args{image};
+    $args{provider} //= get_var('PUBLIC_CLOUD_PROVIDER', '');
+    $args{repos} //= get_var('INCIDENT_REPO', '');
+
+    my %frameworks = (EC2 => 'amazon', AZURE => 'microsoft', GCE => 'google', GCP => 'google');
+    my %updates;
+    foreach my $repo (grep { /\S/ } split(/\s*,\s*/, $args{repos} =~ s/^\s+|\s+$//gr)) {
+        eval { %updates = (%updates, _qesap_repo_packages($repo)); 1 }
+          or record_info('INCIDENT PKG', "Cannot read the packages of $repo: $@");
+    }
+
+    my $image = eval {
+        die "The provider '$args{provider}' is not supported\n" unless $frameworks{uc($args{provider})};
+        die "No package found in the incident repositories\n" unless %updates;
+        _qesap_image_packages($frameworks{uc($args{provider})}, $args{image});
+    };
+    unless ($image) {
+        record_info('INCIDENT PKG', "No package check for the image $args{image}: $@");
+        return 0;
+    }
+
+    my %found = map { $_ => {image_version => join(',', @{$image->{$_}}), update_version => $updates{$_}} }
+      grep { $image->{$_} } keys %updates;
+    record_info('INCIDENT PKG', join("\n", "Image: $args{image}",
+            'Incident packages: ' . join(' ', sort keys %updates),
+            'Incident packages in the image:',
+            (map { "  $_ image:$found{$_}{image_version} update:$found{$_}{update_version}" } sort keys %found),
+            (%found ? () : '  none')));
+    return %found ? \%found : 0;
 }
 
 1;
