@@ -14,6 +14,7 @@ use utils;
 use qam;
 use publiccloud::ssh_interactive "select_host_console";
 use publiccloud::utils "validate_repo";
+use sles4sap::qesap::qesapdeployment "qesap_incident_packages_in_image";
 
 sub run {
     my ($self, $args) = @_;
@@ -37,6 +38,12 @@ sub run {
             $repo_count++;
         }
         die "No usable test repositories" if ($repo_count == 0);
+
+        # Only for information and only with PUBLIC_CLOUD_REQUIRE_TEST_REPO_UPDATES:
+        # record which packages of the test repositories are already in the image.
+        # The package data is available only for the images of the cloud catalog.
+        qesap_incident_packages_in_image(image => get_var('PUBLIC_CLOUD_IMAGE_ID'), repos => join(',', @repos))
+          if (get_var('PUBLIC_CLOUD_REQUIRE_TEST_REPO_UPDATES') && get_var('PUBLIC_CLOUD_IMAGE_ID') && !get_var('PUBLIC_CLOUD_IMAGE_LOCATION'));
     }
 }
 
