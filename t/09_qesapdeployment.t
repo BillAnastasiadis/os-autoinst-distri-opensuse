@@ -1975,6 +1975,8 @@ subtest '[qesap_incident_packages_in_image] Azure URN' => sub {
     $ret = qesap_incident_packages_in_image(image => 'suse:nemo:gen2:2026.09.15');
     is_deeply([keys %$ret], ['marlin-tools'], 'A fixed version selects the image with this version');
     ok((any { /microsoft\/images\.json$/ } @calls), 'A fixed version is searched in the images of all states');
+    $ret = qesap_incident_packages_in_image(image => 'suse:nemo:gen2:2026.09.15', repos => 'http://ocean/ibs/WRECK');
+    is_deeply($ret, {}, 'Return an empty hash when the data is available and no package is in the image');
     ok(!qesap_incident_packages_in_image(image => 'suse:nigel:gen2:latest'), 'Return a false value with an unknown URN');
 
     set_var($_, undef) foreach (qw(PUBLIC_CLOUD_PROVIDER INCIDENT_REPO));

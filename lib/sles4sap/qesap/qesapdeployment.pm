@@ -2552,12 +2552,13 @@ sub _qesap_image_packages {
     the image data is downloaded from the worker and the repository metadata
     from the jumphost, then the jumphost must be able to reach the host of the repositories.
 
-    Return a hash reference if one or more packages are in the image.
+    Return a hash reference if the package data of the repositories and of the image is available.
+    The hash is empty if no package is in the image.
     The key is the package name. Each value is a hash with:
      - image_version: version in the image. Many versions are separated by comma.
      - update_version: version in the incident repository.
 
-    Return 0 if no package is in the image or if the data is not available.
+    Return 0 if the data is not available: the caller cannot know if the packages are in the image.
     The function records each problem with record_info and does not die.
     The only exception is a missing argument.
 
@@ -2604,7 +2605,7 @@ sub qesap_incident_packages_in_image {
             'Incident packages in the image:',
             (map { "  $_ image:$found{$_}{image_version} update:$found{$_}{update_version}" } sort keys %found),
             (%found ? () : '  none')));
-    return %found ? \%found : 0;
+    return \%found;
 }
 
 1;
